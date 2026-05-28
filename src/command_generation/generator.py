@@ -1779,6 +1779,15 @@ def _typescript_native_runtime_helpers(*, recovery_command: str) -> str:
     )
 
 
+def _host_runtime_support_label(*, host_manifest: CommandGenerationHostManifest, support_path: Path) -> str:
+    if not support_path.is_absolute():
+        return support_path.as_posix()
+    try:
+        return support_path.resolve().relative_to(host_manifest.generated_root.resolve().parent).as_posix()
+    except ValueError:
+        return support_path.name
+
+
 def _typescript_runtime_module(
     *,
     source_path: str,
@@ -1788,10 +1797,11 @@ def _typescript_runtime_module(
     if host_manifest.typescript_runtime_support_path is not None:
         support_path = host_manifest.typescript_runtime_support_path
         support = support_path.read_text(encoding="utf-8")
+        support_label = _host_runtime_support_label(host_manifest=host_manifest, support_path=support_path)
         return (
             "// Generated native TypeScript operation runtime.\n"
             f"// Source: {source_path}\n"
-            f"// Host runtime support: {support_path.as_posix()}\n"
+            f"// Host runtime support: {support_label}\n"
             f"// Regenerate with: {regenerate_command}\n"
             "// DO NOT EDIT DIRECTLY.\n\n"
             + support
