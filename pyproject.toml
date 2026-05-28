@@ -1,0 +1,24 @@
+[project]
+name = "command-generation"
+version = "0.1.0"
+description = "Command generation package extracted from Agentic Workspace."
+authors = [
+    { name = "Rickard von Haugwitz", email = "rickardvh@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+command-generation = "command_generation:main"
+
+[build-system]
+requires = ["uv_build>=0.10.11,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "agentic-workspace",
+]
+
+[tool.uv.sources]
+agentic-workspace = { git = "https://github.com/rickardvh/agentic-workspace.git", branch = "master" }

@@ -1,0 +1,252 @@
+{
+  "schema_version": "skill-registry.v1",
+  "owner": "agentic-workspace",
+  "source_kind": "installed-workspace-skills",
+  "skills": [
+    {
+      "id": "workspace-startup",
+      "path": "workspace-startup/SKILL.md",
+      "scope": "bundled",
+      "stability": "package-managed",
+      "summary": "orient through compact workspace commands before opening raw planning, memory, or docs surfaces",
+      "activation_hints": {
+        "verbs": ["start", "orient", "route", "preflight", "bootstrap", "closeout", "prove"],
+        "nouns": ["workspace", "startup", "workflow", "config", "proof", "closeout", "module map"],
+        "phrases": [
+          "workspace startup",
+          "orient in the workspace",
+          "route this task",
+          "what should I do first",
+          "proof and closeout"
+        ],
+        "when": [
+          "first contact with an installed workspace",
+          "task shape or proof route is unclear",
+          "agent is tempted to scan raw workspace docs"
+        ]
+      }
+    },
+    {
+      "id": "workspace-intent-discovery",
+      "path": "workspace-intent-discovery/SKILL.md",
+      "scope": "bundled",
+      "stability": "package-managed",
+      "summary": "run bounded human intent discovery before vague or high-stakes prompts become Planning or implementation",
+      "activation_hints": {
+        "verbs": ["ask", "clarify", "discover", "resolve", "brainstorm", "extract", "capture"],
+        "nouns": [
+          "intent discovery",
+          "human intent",
+          "vague prompt",
+          "candidate interpretations",
+          "non-goals",
+          "first slice",
+          "stakes if wrong",
+          "clarification"
+        ],
+        "phrases": [
+          "intent-discovery dialogue",
+          "clarify human intent with candidate interpretations before planning",
+          "clarify human intent",
+          "candidate interpretations",
+          "ask before implementation",
+          "ask before planning",
+          "vague high-stakes prompt",
+          "what outcome is desired",
+          "proceed with stated assumptions"
+        ],
+        "when": [
+          "prompt is vague or under-specified",
+          "stakes_if_wrong is high and inferred_intent_confidence is low",
+          "agent might silently choose a convenient implementation slice",
+          "why, desired outcome, non-goals, or acceptable first slice are missing"
+        ]
+      }
+    },
+    {
+      "id": "workspace-work-shape",
+      "path": "workspace-work-shape/SKILL.md",
+      "scope": "bundled",
+      "stability": "package-managed",
+      "summary": "classify work shape and route direct, bounded, lane, or epic work before implementation",
+      "activation_hints": {
+        "verbs": ["classify", "triage", "shape", "route", "decide", "infer", "resolve"],
+        "nouns": [
+          "work shape",
+          "direct task",
+          "bounded task",
+          "lane",
+          "epic",
+          "vague request",
+          "vague outcome",
+          "intended outcome",
+          "intent",
+          "trust",
+          "rework",
+          "handoff trust",
+          "what I meant",
+          "satisfaction evidence"
+        ],
+        "phrases": [
+          "classify work shape",
+          "shape this work",
+          "infer intended outcome",
+          "resolve intended outcome",
+          "vague outcome prompt",
+          "feel more trustworthy",
+          "agents hand work back",
+          "agents keep making me repeat",
+          "what I meant",
+          "long task handoff",
+          "before naming a solution",
+          "how to know intent is satisfied",
+          "large vague feature request",
+          "before implementation",
+          "direct bounded lane epic"
+        ],
+        "when": [
+          "task size is unclear",
+          "the user describes an outcome rather than a solution",
+          "the user names a desired quality such as trust, less rework, or safer handoff",
+          "intent needs to be preserved before implementation",
+          "satisfaction criteria are unclear",
+          "agent may jump straight to implementation",
+          "broad work needs routing before planning"
+        ]
+      }
+    },
+    {
+      "id": "workspace-proof-selection",
+      "path": "workspace-proof-selection/SKILL.md",
+      "scope": "bundled",
+      "stability": "package-managed",
+      "summary": "select and interpret proof for task, slice, lane, or epic completion claims",
+      "activation_hints": {
+        "verbs": ["prove", "validate", "verify", "classify", "select"],
+        "nouns": [
+          "proof selection",
+          "completion claim",
+          "validation evidence",
+          "negative proof",
+          "skipped tests",
+          "proof gap",
+          "claim level"
+        ],
+        "phrases": [
+          "proof selection",
+          "completion claim allowed",
+          "negative proof",
+          "passed with warning",
+          "proof gap",
+          "claim level",
+          "proof before completion"
+        ],
+        "when": [
+          "proof must match task, slice, lane, or epic scope",
+          "validation passed but completion may not be justified",
+          "skips, retries, warnings, crashes, or negative evidence need interpretation"
+        ]
+      }
+    },
+    {
+      "id": "workspace-transition-gates",
+      "path": "workspace-transition-gates/SKILL.md",
+      "scope": "bundled",
+      "stability": "package-managed",
+      "summary": "apply SkillSpec-backed gates to startup, planning, proof, memory, and closeout transitions",
+      "activation_hints": {
+        "verbs": ["gate", "transition", "route", "preserve", "fallback"],
+        "nouns": [
+          "SkillSpec",
+          "transition gate",
+          "allowed actions",
+          "forbidden actions",
+          "preferred CLI",
+          "interpreted fields",
+          "no-CLI fallback"
+        ],
+        "phrases": [
+          "SkillSpec-backed gate",
+          "transition gate",
+          "allowed actions",
+          "forbidden actions",
+          "preferred CLI",
+          "no-CLI fallback"
+        ],
+        "when": [
+          "moving between workspace, planning, proof, memory, or closeout",
+          "a transition needs explicit allowed and forbidden actions",
+          "CLI fallback must preserve the same guardrails"
+        ]
+      }
+    },
+    {
+      "id": "workspace-operating-loop",
+      "path": "workspace-operating-loop/SKILL.md",
+      "scope": "bundled",
+      "stability": "package-managed",
+      "summary": "apply the core operating loop and module slot contract across workspace, planning, proof, closeout, and memory",
+      "activation_hints": {
+        "verbs": ["orchestrate", "slot", "route", "own", "preserve"],
+        "nouns": [
+          "operating loop",
+          "module slot",
+          "module slot contract",
+          "workspace slot",
+          "planning slot",
+          "memory slot",
+          "direct answer"
+        ],
+        "phrases": [
+          "operating loop",
+          "module slot contract",
+          "module slot",
+          "answer directly no artifact",
+          "planning memory workspace loop",
+          "completion claim allowed"
+        ],
+        "when": [
+          "module ownership is unclear",
+          "a next-safe-action packet names a module slot",
+          "the agent may create an unnecessary artifact instead of answering directly"
+        ]
+      }
+    },
+    {
+      "id": "workspace-setup-jumpstart",
+      "path": "workspace-setup-jumpstart/SKILL.md",
+      "scope": "bundled",
+      "stability": "package-managed",
+      "summary": "route newly installed or adopted Agentic Workspace in a lived-in repo through bounded setup and jumpstart discovery before seeding durable surfaces",
+      "activation_hints": {
+        "verbs": ["setup", "jumpstart", "populate", "seed", "adopt", "install", "orient"],
+        "nouns": [
+          "lived-in repo",
+          "mature repo",
+          "post-bootstrap",
+          "setup findings",
+          "seed surfaces",
+          "durable surfaces",
+          "workspace surfaces",
+          "new repo adoption"
+        ],
+        "phrases": [
+          "setup jumpstart",
+          "mature repo jumpstart",
+          "lived-in repo",
+          "post-bootstrap setup",
+          "populate surfaces",
+          "seed surfaces",
+          "newly installed workspace",
+          "after install",
+          "new repo adoption"
+        ],
+        "when": [
+          "Agentic Workspace was newly installed or adopted in a lived-in repo",
+          "workspace surfaces need to be populated after init or install",
+          "mature repo discovery needs bounded pre-seed routing"
+        ]
+      }
+    }
+  ]
+}

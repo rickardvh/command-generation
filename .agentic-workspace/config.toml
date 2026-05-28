@@ -1,0 +1,12 @@
+# Agentic Workspace managed config.
+# Edit this file directly only when changing repo-owned policy.
+# Reference: .agentic-workspace/docs/workspace-config-contract.md
+# Check resolved config: agentic-workspace config --target . --format json
+
+schema_version = 1
+
+[workspace]
+default_preset = "full"
+agent_instructions_file = "AGENTS.md"
+workflow_artifact_profile = "repo-owned"
+cli_invoke = "uv run agentic-workspace"
