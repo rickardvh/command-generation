@@ -1872,7 +1872,7 @@ function globFiles(root, pattern) {{
     return files.filter((file) => file.endsWith(suffix));
   }}
   if (!normalized.includes('*')) return files.filter((file) => file === normalized);
-  const escaped = normalized.replace(/[.+^${{}}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*');
+  const escaped = normalized.replace(/[.+^${{}}()|[\\]\\\\]/g, '\\\\$&').replace(/\\*\\*/g, '.*').replace(/\\*/g, '[^/]*');
   const regex = new RegExp(`^${{escaped}}$`);
   return files.filter((file) => regex.test(file));
 }}
