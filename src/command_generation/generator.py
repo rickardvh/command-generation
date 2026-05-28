@@ -244,6 +244,8 @@ def _validate_target_primitive_support(
     if registry is None:
         return
     target_kind = str(target.get("kind", ""))
+    if target_kind not in {"python", "typescript"}:
+        return
     errors: list[str] = []
     for command in _python_adapter_commands(package):
         for operation_ref in _command_operation_refs(command):
