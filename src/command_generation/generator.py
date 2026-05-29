@@ -928,14 +928,14 @@ def _python_local_runtime_helper_block() -> str:
         "        raise ValueError(f'{source_command} --section must match one of: {supported}.')\n"
         "    answer = payload[normalized]\n"
         "    return _compact_contract_answer(surface=source_command, selector={'section': normalized}, answer=answer, refs=_selector_refs(command=command_ref, answer=answer, compact_profile_ref=compact_profile_ref))\n\n\n"
-        "def _tiny_sectioned_payload(payload: dict[str, Any], *, common_sections: list[str], source_command: str, sectioned_payload_kind: str) -> dict[str, Any]:\n"
+        "def _tiny_sectioned_payload(payload: dict[str, Any], *, common_sections: list[str], sectioned_payload_kind: str, section_detail_command: str, full_detail_command: str) -> dict[str, Any]:\n"
         "    return {\n"
         "        'kind': sectioned_payload_kind,\n"
         "        'profile': 'tiny',\n"
         "        'summary': 'Default-route contract sections are available on demand; request one section or full detail instead of loading the whole contract.',\n"
         "        'available_sections': sorted(str(key) for key in payload),\n"
         "        'common_sections': list(common_sections),\n"
-        "        'detail_commands': {'section': f'{source_command} --section <section> --format json', 'full': f'{source_command} --verbose --format json'},\n"
+        "        'detail_commands': {'section': section_detail_command, 'full': full_detail_command},\n"
         "    }\n"
         "\n\n"
         "def _emit_tiny_sectioned_text(payload: dict[str, Any]) -> str:\n"
@@ -1022,6 +1022,8 @@ def _python_local_runtime_generated_function(
         sectioned_payload_kind = str(override.get("sectioned_payload_kind") or "command-generation/sectioned-resource/v1")
         compact_profile_ref = str(override.get("compact_profile_ref") or "")
         section_command_ref = str(override.get("section_command_ref") or f"{source_command} --format json")
+        section_detail_command = str(override.get("section_detail_command") or f"{source_command} --section <section> --format json")
+        full_detail_command = str(override.get("full_detail_command") or f"{source_command} --verbose --format json")
         return (
             f"def {function}(values: dict[str, Any], _arguments: dict[str, Any], _context: Any) -> dict[str, Any]:\n"
             f"    payload = values[{payload_value!r}]\n"
@@ -1029,7 +1031,7 @@ def _python_local_runtime_generated_function(
             "    if section is not None:\n"
             f"        payload = _select_section(payload, section=str(section), source_command={source_command!r}, command_ref={section_command_ref!r}, compact_profile_ref={compact_profile_ref!r})\n"
             "    elif ('full' if values.get('verbose') else str(values.get('profile') or 'tiny')) == 'tiny':\n"
-            f"        payload = _tiny_sectioned_payload(payload, common_sections={common_sections!r}, source_command={source_command!r}, sectioned_payload_kind={sectioned_payload_kind!r})\n"
+            f"        payload = _tiny_sectioned_payload(payload, common_sections={common_sections!r}, sectioned_payload_kind={sectioned_payload_kind!r}, section_detail_command={section_detail_command!r}, full_detail_command={full_detail_command!r})\n"
             "    select = values.get('select')\n"
             "    if select is not None:\n"
             f"        payload = _select_payload_fields(payload, select=str(select), source_command={source_command!r}, selected_output_kind={selected_output_kind!r})\n"

@@ -584,6 +584,14 @@
                           "type": "string",
                           "minLength": 1
                         },
+                        "section_detail_command": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "full_detail_command": {
+                          "type": "string",
+                          "minLength": 1
+                        },
                         "delegation_outcomes_kind": {
                           "type": "string"
                         },
