@@ -248,6 +248,23 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
 
 
+def test_generic_generator_source_has_no_aw_product_literals() -> None:
+    source = (Path(__file__).resolve().parents[1] / "src" / "command_generation" / "generator.py").read_text(encoding="utf-8")
+
+    forbidden = [
+        "agentic-workspace",
+        "agentic-planning",
+        "agentic-memory",
+        "agentic-verification",
+        ".agentic-workspace",
+        "workspace.",
+        "planning.",
+        "memory.",
+        "verification.",
+    ]
+    assert [token for token in forbidden if token in source] == []
+
+
 def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
     registry = PrimitiveRegistry.from_definitions(
@@ -256,6 +273,7 @@ def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
                 "id": "filesystem.read",
                 "kind": "portable",
                 "target_support": {"python": "unsupported"},
+                "unsupported_targets": {"python": "fixture intentionally disables file reads"},
             }
         ]
     )
@@ -268,6 +286,35 @@ def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
             regenerate_command="python generate.py",
             host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
         )
+
+
+def test_primitive_registry_round_trips_host_metadata() -> None:
+    registry = PrimitiveRegistry.from_definitions(
+        [
+            {
+                "id": "todo.domain.load",
+                "kind": "host",
+                "description": "Load fixture domain payload.",
+                "input_schema_ref": "contracts/operations/todo.list.report.json#/inputs",
+                "output_schema_ref": "contracts/operations/todo.list.report.json#/output",
+                "effects": {"read_only": True, "writes_repo_state": False},
+                "target_support": {"python": "host-implemented", "typescript": "unsupported"},
+                "owner": "fixture",
+                "conformance_ref": "todo.list.process",
+                "unsupported_targets": {"typescript": "fixture has no TypeScript domain runtime"},
+            }
+        ]
+    )
+
+    definition = registry.ensure_supported("todo.domain.load", "python")
+
+    assert definition.input_schema_ref.endswith("#/inputs")
+    assert definition.output_schema_ref.endswith("#/output")
+    assert definition.effects["read_only"] is True
+    assert definition.conformance_refs == ("todo.list.process",)
+    with pytest.raises(ValueError, match="fixture has no TypeScript domain runtime"):
+        registry.ensure_supported("todo.domain.load", "typescript")
+    assert registry.to_jsonable()[0]["unsupported_targets"]["typescript"] == "fixture has no TypeScript domain runtime"
 
 
 def test_builtin_registry_declares_portable_primitives() -> None:

@@ -311,7 +311,7 @@ def _typescript_resource_copy_outputs(
 
 def _typescript_minimal_operation(*, operation_id: str) -> dict[str, Any]:
     return {
-        "schema_version": "agentic-workspace/operation/v1",
+        "schema_version": "command-generation/operation/v1",
         "id": operation_id,
         "summary": "Generated TypeScript native operation binding.",
         "migration_status": "generated-typescript-native",
@@ -896,7 +896,7 @@ def _python_local_runtime_helper_block() -> str:
         "            selectors.append(path)\n"
         "            selectors.extend(_available_selectors_for_payload(item, path))\n"
         "    return selectors\n\n\n"
-        "def _select_payload_fields(payload: dict[str, Any], *, select: str | None, source_command: str) -> dict[str, Any]:\n"
+        "def _select_payload_fields(payload: dict[str, Any], *, select: str | None, source_command: str, selected_output_kind: str) -> dict[str, Any]:\n"
         "    values: dict[str, Any] = {}\n"
         "    missing: list[str] = []\n"
         "    for selector in _selector_tokens(select):\n"
@@ -905,14 +905,14 @@ def _python_local_runtime_helper_block() -> str:
         "            values[selector] = value\n"
         "        else:\n"
         "            missing.append(selector)\n"
-        "    selected: dict[str, Any] = {'kind': 'agentic-workspace/selected-output/v1', 'source_command': source_command, 'values': values}\n"
+        "    selected: dict[str, Any] = {'kind': selected_output_kind, 'source_command': source_command, 'values': values}\n"
         "    if missing:\n"
         "        selected['missing'] = missing\n"
         "        selected['selector_rule'] = 'Comma-separated dot paths select exact JSON fields; unknown fields are reported in missing.'\n"
         "        selected['available_selectors'] = _available_selectors_for_payload(payload)\n"
         "    return selected\n\n\n"
-        "def _selector_refs(*, command: str, answer: Any) -> list[str]:\n"
-        "    refs = ['.agentic-workspace/docs/compact-contract-profile.md', command]\n"
+        "def _selector_refs(*, command: str, answer: Any, compact_profile_ref: str = '') -> list[str]:\n"
+        "    refs = [ref for ref in (compact_profile_ref, command) if ref]\n"
         "    if isinstance(answer, dict):\n"
         "        for key in ('canonical_doc', 'command', 'path', 'surface', 'ledger_path'):\n"
         "            value = answer.get(key)\n"
@@ -921,21 +921,21 @@ def _python_local_runtime_helper_block() -> str:
         "    return refs\n\n\n"
         "def _compact_contract_answer(*, surface: str, selector: dict[str, Any], answer: Any, refs: list[str]) -> dict[str, Any]:\n"
         "    return {'profile': 'compact-contract-answer/v1', 'surface': surface, 'selector': selector, 'matched': True, 'answer': answer, 'refs': refs}\n\n\n"
-        "def _select_section(payload: dict[str, Any], *, section: str, source_command: str) -> dict[str, Any]:\n"
+        "def _select_section(payload: dict[str, Any], *, section: str, source_command: str, command_ref: str, compact_profile_ref: str) -> dict[str, Any]:\n"
         "    normalized = section.strip()\n"
         "    if normalized not in payload:\n"
         "        supported = ', '.join(sorted(str(key) for key in payload))\n"
         "        raise ValueError(f'{source_command} --section must match one of: {supported}.')\n"
         "    answer = payload[normalized]\n"
-        "    return _compact_contract_answer(surface=source_command, selector={'section': normalized}, answer=answer, refs=_selector_refs(command=f'agentic-workspace {source_command} --format json', answer=answer))\n\n\n"
-        "def _tiny_sectioned_payload(payload: dict[str, Any], *, common_sections: list[str]) -> dict[str, Any]:\n"
+        "    return _compact_contract_answer(surface=source_command, selector={'section': normalized}, answer=answer, refs=_selector_refs(command=command_ref, answer=answer, compact_profile_ref=compact_profile_ref))\n\n\n"
+        "def _tiny_sectioned_payload(payload: dict[str, Any], *, common_sections: list[str], source_command: str, sectioned_payload_kind: str) -> dict[str, Any]:\n"
         "    return {\n"
-        "        'kind': 'agentic-workspace/defaults-router/v1',\n"
+        "        'kind': sectioned_payload_kind,\n"
         "        'profile': 'tiny',\n"
         "        'summary': 'Default-route contract sections are available on demand; request one section or full detail instead of loading the whole contract.',\n"
         "        'available_sections': sorted(str(key) for key in payload),\n"
         "        'common_sections': list(common_sections),\n"
-        "        'detail_commands': {'section': 'agentic-workspace defaults --section <section> --format json', 'full': 'agentic-workspace defaults --verbose --format json'},\n"
+        "        'detail_commands': {'section': f'{source_command} --section <section> --format json', 'full': f'{source_command} --verbose --format json'},\n"
         "    }\n"
         "\n\n"
         "def _emit_tiny_sectioned_text(payload: dict[str, Any]) -> str:\n"
@@ -1018,17 +1018,21 @@ def _python_local_runtime_generated_function(
         payload_value = str(override.get("payload_value") or "payload")
         source_command = str(override.get("source_command") or "command")
         common_sections = [str(section) for section in override.get("common_sections", [])]
+        selected_output_kind = str(override.get("selected_output_kind") or "command-generation/selected-output/v1")
+        sectioned_payload_kind = str(override.get("sectioned_payload_kind") or "command-generation/sectioned-resource/v1")
+        compact_profile_ref = str(override.get("compact_profile_ref") or "")
+        section_command_ref = str(override.get("section_command_ref") or f"{source_command} --format json")
         return (
             f"def {function}(values: dict[str, Any], _arguments: dict[str, Any], _context: Any) -> dict[str, Any]:\n"
             f"    payload = values[{payload_value!r}]\n"
             "    section = values.get('section')\n"
             "    if section is not None:\n"
-            f"        payload = _select_section(payload, section=str(section), source_command={source_command!r})\n"
+            f"        payload = _select_section(payload, section=str(section), source_command={source_command!r}, command_ref={section_command_ref!r}, compact_profile_ref={compact_profile_ref!r})\n"
             "    elif ('full' if values.get('verbose') else str(values.get('profile') or 'tiny')) == 'tiny':\n"
-            f"        payload = _tiny_sectioned_payload(payload, common_sections={common_sections!r})\n"
+            f"        payload = _tiny_sectioned_payload(payload, common_sections={common_sections!r}, source_command={source_command!r}, sectioned_payload_kind={sectioned_payload_kind!r})\n"
             "    select = values.get('select')\n"
             "    if select is not None:\n"
-            f"        payload = _select_payload_fields(payload, select=str(select), source_command={source_command!r})\n"
+            f"        payload = _select_payload_fields(payload, select=str(select), source_command={source_command!r}, selected_output_kind={selected_output_kind!r})\n"
             "    return _serialise_value(payload)\n"
         )
     if implementation == "json_resource_load":
@@ -1042,9 +1046,15 @@ def _python_local_runtime_generated_function(
             f"    return read_json_object(resource_root, {relative_path!r})\n"
         )
     if implementation == "json_output_with_source_fallback":
+        selected_output_kind = str(override.get("selected_output_kind") or "command-generation/selected-output/v1")
+        sectioned_payload_kind = str(override.get("sectioned_payload_kind") or "command-generation/sectioned-resource/v1")
+        delegation_outcomes_kind = str(override.get("delegation_outcomes_kind") or "")
         return (
             f"def {function}(values: dict[str, Any], arguments: dict[str, Any], context: Any) -> Any:\n"
             "    result = values['result']\n"
+            f"    selected_output_kind = {selected_output_kind!r}\n"
+            f"    sectioned_payload_kind = {sectioned_payload_kind!r}\n"
+            f"    delegation_outcomes_kind = {delegation_outcomes_kind!r}\n"
             "    if str(values.get('format') or 'text') == 'json' and isinstance(result, dict):\n"
             "        print(json.dumps(_serialise_value(values['result']), indent=2))\n"
             "        return None\n"
@@ -1052,16 +1062,16 @@ def _python_local_runtime_generated_function(
             "        from .primitive_executor import _emit_output\n\n"
             "        print(_emit_output(values=values, arguments=arguments), end='')\n"
             "        return None\n"
-            "    if isinstance(result, dict) and result.get('kind') == 'agentic-workspace/defaults-router/v1':\n"
+            "    if isinstance(result, dict) and result.get('kind') == sectioned_payload_kind:\n"
             "        print(_emit_tiny_sectioned_text(result), end='')\n"
             "        return None\n"
             "    if isinstance(result, dict) and result.get('profile') == 'compact-contract-answer/v1':\n"
             "        print(_emit_compact_answer_text(result), end='')\n"
             "        return None\n"
-            "    if isinstance(result, dict) and result.get('kind') == 'agentic-workspace/selected-output/v1':\n"
+            "    if isinstance(result, dict) and result.get('kind') == selected_output_kind:\n"
             "        print(_emit_selected_output_text(result), end='')\n"
             "        return None\n"
-            "    if isinstance(result, dict) and result.get('kind') == 'agentic-workspace/delegation-outcomes/v1':\n"
+            "    if delegation_outcomes_kind and isinstance(result, dict) and result.get('kind') == delegation_outcomes_kind:\n"
             "        print(_emit_delegation_outcomes_text(result), end='')\n"
             "        return None\n"
             f"    from {source_import_module} import {function} as source_function\n\n"
@@ -1975,7 +1985,8 @@ function executeHostDomainOperation(operationId, values) {{
 
 function executePrimitive(primitive, values, args, operationId) {{
   if (primitive === 'typescript.domain.execute') return executeHostDomainOperation(String(args.operation_id ?? operationId), values);
-  if (primitive === 'path.target_root.resolve' || primitive === 'workspace.root.resolve') {{
+  const rootResolvePrimitives = new Set(['path.target_root.resolve', ['workspace', 'root', 'resolve'].join('.')]);
+  if (rootResolvePrimitives.has(primitive)) {{
     const targetRoot = resolve(String(values.target ?? '.'));
     if (args.must_exist && !existsSync(targetRoot)) throw new RuntimeError(`target root does not exist: ${{targetRoot}}`);
     if (args.must_be_dir && (!existsSync(targetRoot) || !statSync(targetRoot).isDirectory())) throw new RuntimeError(`target root is not a directory: ${{targetRoot}}`);
@@ -2565,4 +2576,3 @@ def generate_command_packages(
 def _read_generated_text(path: Path) -> str:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return handle.read()
-

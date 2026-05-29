@@ -10,32 +10,55 @@ class PrimitiveDefinition:
     id: str
     kind: str
     input_schema: Mapping[str, Any] = field(default_factory=dict)
+    input_schema_ref: str = ""
     output_schema: Mapping[str, Any] = field(default_factory=dict)
+    output_schema_ref: str = ""
     effects: Mapping[str, Any] = field(default_factory=dict)
     target_support: Mapping[str, str] = field(default_factory=dict)
     owner: str = "command-generation"
+    description: str = ""
     conformance_refs: tuple[str, ...] = ()
     unsupported_behavior: str = "fail"
+    unsupported_targets: Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "PrimitiveDefinition":
         primitive_id = str(raw.get("id", "")).strip()
         if not primitive_id:
             raise ValueError("primitive definition id is required")
+
+        def object_field(name: str) -> dict[str, Any]:
+            value = raw.get(name, {})
+            return dict(value) if isinstance(value, Mapping) else {}
+
         refs = raw.get("conformance_refs", ())
         if isinstance(refs, str) or not isinstance(refs, Iterable):
             refs = ()
+        singular_ref = str(raw.get("conformance_ref", "")).strip()
+        normalized_refs = [str(item) for item in refs if str(item).strip()]
+        if singular_ref and singular_ref not in normalized_refs:
+            normalized_refs.append(singular_ref)
         return cls(
             id=primitive_id,
             kind=str(raw.get("kind", "portable")).strip() or "portable",
-            input_schema=dict(raw.get("input_schema", {})),
-            output_schema=dict(raw.get("output_schema", {})),
-            effects=dict(raw.get("effects", {})),
-            target_support={str(key): str(value) for key, value in dict(raw.get("target_support", {})).items()},
+            input_schema=object_field("input_schema"),
+            input_schema_ref=str(raw.get("input_schema_ref", "")).strip(),
+            output_schema=object_field("output_schema"),
+            output_schema_ref=str(raw.get("output_schema_ref", "")).strip(),
+            effects=object_field("effects"),
+            target_support={str(key): str(value) for key, value in object_field("target_support").items()},
             owner=str(raw.get("owner", "command-generation")),
-            conformance_refs=tuple(str(item) for item in refs),
+            description=str(raw.get("description", raw.get("summary", ""))).strip(),
+            conformance_refs=tuple(normalized_refs),
             unsupported_behavior=str(raw.get("unsupported_behavior", "fail")),
+            unsupported_targets={str(key): str(value) for key, value in object_field("unsupported_targets").items()},
         )
+
+    def support_for(self, target: str) -> str:
+        return self.target_support.get(target, "unsupported")
+
+    def unsupported_reason(self, target: str) -> str:
+        return self.unsupported_targets.get(target) or self.unsupported_behavior
 
 
 class PrimitiveRegistry:
@@ -57,9 +80,10 @@ class PrimitiveRegistry:
 
     def ensure_supported(self, primitive_id: str, target: str) -> PrimitiveDefinition:
         definition = self.require_declared(primitive_id)
-        support = definition.target_support.get(target, "unsupported")
+        support = definition.support_for(target)
         if support not in {"implemented", "portable", "host-implemented"}:
-            raise ValueError(f"primitive {primitive_id!r} is {support!r} for target {target!r}")
+            reason = definition.unsupported_reason(target)
+            raise ValueError(f"primitive {primitive_id!r} is {support!r} for target {target!r}: {reason}")
         return definition
 
     def ids(self) -> set[str]:
@@ -74,12 +98,16 @@ class PrimitiveRegistry:
                 "id": definition.id,
                 "kind": definition.kind,
                 "input_schema": dict(definition.input_schema),
+                "input_schema_ref": definition.input_schema_ref,
                 "output_schema": dict(definition.output_schema),
+                "output_schema_ref": definition.output_schema_ref,
                 "effects": dict(definition.effects),
                 "target_support": dict(definition.target_support),
                 "owner": definition.owner,
+                "description": definition.description,
                 "conformance_refs": list(definition.conformance_refs),
                 "unsupported_behavior": definition.unsupported_behavior,
+                "unsupported_targets": dict(definition.unsupported_targets),
             }
             for definition in sorted(self._definitions.values(), key=lambda item: item.id)
         ]
