@@ -307,6 +307,14 @@ def test_output_emit_renders_file_lists_as_text_lines(tmp_path: Path) -> None:
     assert result == "required.md\noptional.md\n"
 
 
+def test_generic_primitive_executor_has_no_aw_path_literals() -> None:
+    source = (Path(__file__).resolve().parents[1] / "src" / "command_generation" / "primitive_executor.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert ".agentic-workspace" not in source
+
+
 def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
     registry = PrimitiveRegistry.from_definitions(

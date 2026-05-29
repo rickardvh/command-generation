@@ -381,7 +381,7 @@ def _verify_payload(*, values: dict[str, Any], arguments: dict[str, Any], contex
     current_memory = policy.get("current_memory", {})
     if not isinstance(current_memory, dict):
         raise PrimitiveExecutionError("payload.verify current_memory must be an object")
-    current_prefix = str(current_memory.get("prefix", ".agentic-workspace/memory/repo/current/"))
+    current_prefix = str(current_memory.get("prefix", ""))
     current_payload = {path for path in payload_paths if path.startswith(current_prefix)}
     required_current = set(_string_list(current_memory.get("required", []), source="payload.verify current_memory.required"))
     optional_current = set(_string_list(current_memory.get("optional", []), source="payload.verify current_memory.optional"))
