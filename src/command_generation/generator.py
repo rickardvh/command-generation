@@ -270,6 +270,7 @@ def _typescript_resource_copy_outputs(
     *,
     repo_root: Path,
     root: Path,
+    host_manifest: CommandGenerationHostManifest,
 ) -> list[GeneratedOutput]:
     outputs: list[GeneratedOutput] = []
     if not _typescript_native_operation_ids(package):
@@ -297,7 +298,10 @@ def _typescript_resource_copy_outputs(
             operation = (
                 json.loads(source.read_text(encoding="utf-8"))
                 if source.is_file()
-                else _typescript_minimal_operation(operation_id=operation_id)
+                else _typescript_minimal_operation(
+                    operation_id=operation_id,
+                    schema_version=host_manifest.operation_schema_version,
+                )
             )
             emitted_operation_paths.add(operation_path)
             outputs.append(
@@ -309,9 +313,9 @@ def _typescript_resource_copy_outputs(
     return outputs
 
 
-def _typescript_minimal_operation(*, operation_id: str) -> dict[str, Any]:
+def _typescript_minimal_operation(*, operation_id: str, schema_version: str = "command-generation/operation/v1") -> dict[str, Any]:
     return {
-        "schema_version": "command-generation/operation/v1",
+        "schema_version": schema_version,
         "id": operation_id,
         "summary": "Generated TypeScript native operation binding.",
         "migration_status": "generated-typescript-native",
@@ -2517,7 +2521,7 @@ def render_outputs(
                     )
                 )
                 outputs.append(GeneratedOutput(root / "resources" / "command_package.json", _json_block(package) + "\n"))
-                outputs.extend(_typescript_resource_copy_outputs(package, repo_root=repo_root, root=root))
+                outputs.extend(_typescript_resource_copy_outputs(package, repo_root=repo_root, root=root, host_manifest=host))
                 outputs.append(GeneratedOutput(root / "test" / "command-package.test.mjs", _typescript_test(package, target)))
                 if _is_runnable_typescript_target(target):
                     outputs.append(

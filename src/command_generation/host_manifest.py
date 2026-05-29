@@ -18,6 +18,7 @@ class CommandGenerationHostManifest:
     primitive_registry: PrimitiveRegistry | None = None
     target_bindings: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     typescript_runtime_support_path: Path | None = None
+    operation_schema_version: str = "command-generation/operation/v1"
 
     @classmethod
     def from_mapping(
@@ -66,4 +67,5 @@ class CommandGenerationHostManifest:
             primitive_registry=registry,
             target_bindings=target_bindings,
             typescript_runtime_support_path=_path(raw.get("typescript_runtime_support_path")),
+            operation_schema_version=str(raw.get("operation_schema_version") or "command-generation/operation/v1"),
         )
