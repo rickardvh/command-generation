@@ -1996,6 +1996,7 @@ function emitOutput(values) {{
   const result = values.result;
   if (String(values.format ?? 'text') === 'json') return `${{JSON.stringify(result, null, 2)}}\n`;
   if (!isObject(result)) return `${{result}}\n`;
+  if (Array.isArray(result.files) && result.files.every((item) => typeof item === 'string')) return `${{result.files.join('\n')}}\n`;
   const lines = [String(result.message ?? result.kind ?? '')];
   for (const action of (Array.isArray(result.actions) ? result.actions : [])) lines.push(`- ${{action.path ?? action.id ?? action.kind}}`);
   return `${{lines.join('\n').trimEnd()}}\n`;

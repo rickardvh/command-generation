@@ -878,6 +878,8 @@ def _emit_output(*, values: dict[str, Any], arguments: dict[str, Any] | None = N
         return _emit_planning_module_report_text(result)
     if not isinstance(result, dict):
         return f"{result}\n"
+    if isinstance(result.get("files"), list) and all(isinstance(item, str) for item in result["files"]):
+        return "\n".join(result["files"]).rstrip() + "\n"
     lines = [str(result.get("message", ""))]
     for action in _list_of_objects(result.get("actions", []), source="result.actions"):
         label = action.get("path") or action.get("id") or action.get("kind")

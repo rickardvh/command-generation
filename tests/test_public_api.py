@@ -296,6 +296,17 @@ def test_payload_assemble_builds_declarative_package_file_list(tmp_path: Path) -
     }
 
 
+def test_output_emit_renders_file_lists_as_text_lines(tmp_path: Path) -> None:
+    result = execute_primitive(
+        "output.emit",
+        values={"format": "text", "result": {"files": ["required.md", "optional.md"]}},
+        arguments={},
+        context=PrimitiveContext(cwd=tmp_path),
+    )
+
+    assert result == "required.md\noptional.md\n"
+
+
 def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
     registry = PrimitiveRegistry.from_definitions(
