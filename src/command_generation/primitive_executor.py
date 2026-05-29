@@ -250,18 +250,9 @@ def _assemble_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> d
         raise PrimitiveExecutionError("payload.assemble fields must be an object")
     if "template" in fields:
         return _resolve_template(fields["template"], values=values)
+    if fields.get("payload_kind") == "package-file-list":
+        return _assemble_package_file_list(values=values, fields=fields)
     actions_from = str(fields.get("actions_from", ""))
-    if not fields and isinstance(values.get("files"), list):
-        return {
-            "dry_run": True,
-            "files": values.get("files", []),
-            "bundled_skill_files": values.get("bundled_skill_files", []),
-            "optional_enable_commands": [
-                "agentic-planning install --include-optional",
-                "agentic-planning adopt --include-optional",
-                "agentic-planning upgrade --include-optional",
-            ],
-        }
     payload: dict[str, Any] = {
         "dry_run": bool(fields.get("dry_run", True)),
         "message": str(fields.get("message", "")),
@@ -306,6 +297,21 @@ def _assemble_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> d
             )
         return payload
     raise PrimitiveExecutionError(f"unsupported payload.assemble actions_from: {actions_from!r}")
+
+
+def _assemble_package_file_list(*, values: dict[str, Any], fields: Mapping[str, Any]) -> dict[str, Any]:
+    files_from = str(fields.get("files_from", "files"))
+    bundled_skills_from = str(fields.get("bundled_skill_files_from", "bundled_skill_files"))
+    return {
+        "files": _relative_path_list(values.get(files_from, []), source=files_from),
+        "default_files": _string_list(fields.get("default_files", []), source="payload.assemble fields.default_files"),
+        "optional_files": _string_list(fields.get("optional_files", []), source="payload.assemble fields.optional_files"),
+        "bundled_skill_files": _relative_path_list(values.get(bundled_skills_from, []), source=bundled_skills_from),
+        "optional_enable_commands": _string_list(
+            fields.get("optional_enable_commands", []),
+            source="payload.assemble fields.optional_enable_commands",
+        ),
+    }
 
 
 def _verify_payload(*, values: dict[str, Any], arguments: dict[str, Any], context: PrimitiveContext) -> dict[str, Any]:
@@ -782,6 +788,23 @@ def _string_list(value: Any, *, source: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise PrimitiveExecutionError(f"{source} must be a list of strings")
     return value
+
+
+def _relative_path_list(value: Any, *, source: str) -> list[str]:
+    if not isinstance(value, list):
+        raise PrimitiveExecutionError(f"{source} must be a list")
+    paths: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            paths.append(item)
+            continue
+        if isinstance(item, Mapping):
+            relative_path = item.get("relative_path")
+            if isinstance(relative_path, str):
+                paths.append(relative_path)
+                continue
+        raise PrimitiveExecutionError(f"{source} entries must be strings or objects with relative_path")
+    return paths
 
 
 def _resolve_template(template: Any, *, values: dict[str, Any]) -> Any:

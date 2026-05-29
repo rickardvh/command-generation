@@ -1952,8 +1952,16 @@ function dottedValue(root, dottedPath) {{
 function assemblePayload(values, args) {{
   const fields = args.fields ?? {{}};
   if (fields.template !== undefined) return resolveTemplate(fields.template, values);
-  if (Object.keys(fields).length === 0 && Array.isArray(values.files)) {{
-    return {{ dry_run: true, files: values.files, bundled_skill_files: values.bundled_skill_files ?? [], optional_enable_commands: [] }};
+  if (fields.payload_kind === 'package-file-list') {{
+    const filesFrom = String(fields.files_from ?? 'files');
+    const bundledSkillsFrom = String(fields.bundled_skill_files_from ?? 'bundled_skill_files');
+    return {{
+      files: relativePathList(values[filesFrom] ?? [], filesFrom),
+      default_files: stringList(fields.default_files ?? [], 'payload.assemble fields.default_files'),
+      optional_files: stringList(fields.optional_files ?? [], 'payload.assemble fields.optional_files'),
+      bundled_skill_files: relativePathList(values[bundledSkillsFrom] ?? [], bundledSkillsFrom),
+      optional_enable_commands: stringList(fields.optional_enable_commands ?? [], 'payload.assemble fields.optional_enable_commands')
+    }};
   }}
   const payload = {{ dry_run: Boolean(fields.dry_run ?? true), message: String(fields.message ?? '') }};
   if (values.target_root !== undefined) payload.target_root = String(values.target_root);
@@ -1968,6 +1976,20 @@ function assemblePayload(values, args) {{
     return payload;
   }}
   throw new RuntimeError(`unsupported payload.assemble actions_from: ${{fields.actions_from}}`);
+}}
+
+function stringList(value, source) {{
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) throw new RuntimeError(`${{source}} must be a list of strings`);
+  return value;
+}}
+
+function relativePathList(value, source) {{
+  if (!Array.isArray(value)) throw new RuntimeError(`${{source}} must be a list`);
+  return value.map((item) => {{
+    if (typeof item === 'string') return item;
+    if (isObject(item) && typeof item.relative_path === 'string') return item.relative_path;
+    throw new RuntimeError(`${{source}} entries must be strings or objects with relative_path`);
+  }});
 }}
 
 function emitOutput(values) {{

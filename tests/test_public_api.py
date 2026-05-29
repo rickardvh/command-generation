@@ -10,8 +10,10 @@ import pytest
 from command_generation import (
     BUILTIN_PORTABLE_PRIMITIVES,
     CommandGenerationHostManifest,
+    PrimitiveContext,
     PrimitiveRegistry,
     command_package_schema_path,
+    execute_primitive,
     generate_command_packages,
     load_command_package_ir,
     render_outputs,
@@ -263,6 +265,35 @@ def test_generic_generator_source_has_no_aw_product_literals() -> None:
         "verification.",
     ]
     assert [token for token in forbidden if token in source] == []
+
+
+def test_payload_assemble_builds_declarative_package_file_list(tmp_path: Path) -> None:
+    result = execute_primitive(
+        "payload.assemble",
+        values={
+            "files": [{"relative_path": "required.md"}, {"relative_path": "optional.md"}],
+            "skill_files": [{"relative_path": "fixture-skill/SKILL.md"}],
+        },
+        arguments={
+            "fields": {
+                "payload_kind": "package-file-list",
+                "files_from": "files",
+                "bundled_skill_files_from": "skill_files",
+                "default_files": ["required.md"],
+                "optional_files": ["optional.md"],
+                "optional_enable_commands": ["fixturectl install --include-optional"],
+            }
+        },
+        context=PrimitiveContext(cwd=tmp_path),
+    )
+
+    assert result == {
+        "files": ["required.md", "optional.md"],
+        "default_files": ["required.md"],
+        "optional_files": ["optional.md"],
+        "bundled_skill_files": ["fixture-skill/SKILL.md"],
+        "optional_enable_commands": ["fixturectl install --include-optional"],
+    }
 
 
 def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
