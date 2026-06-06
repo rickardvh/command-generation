@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 
 @dataclass(frozen=True)
@@ -22,16 +23,17 @@ class CanonicalCommandArtifact:
 def _string_tuple(values: object) -> tuple[str, ...]:
     if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
         return ()
-    return tuple(values)
+    return tuple(str(value) for value in values)
 
 
 def _projection_boundary(value: object) -> dict[str, tuple[str, ...]]:
-    if not isinstance(value, dict):
+    if not isinstance(value, Mapping):
         return {"universal": (), "target_specific": (), "runtime_owned": ()}
+    boundary = cast(Mapping[str, object], value)
     return {
-        "universal": _string_tuple(value.get("universal")),
-        "target_specific": _string_tuple(value.get("target_specific")),
-        "runtime_owned": _string_tuple(value.get("runtime_owned")),
+        "universal": _string_tuple(boundary.get("universal")),
+        "target_specific": _string_tuple(boundary.get("target_specific")),
+        "runtime_owned": _string_tuple(boundary.get("runtime_owned")),
     }
 
 

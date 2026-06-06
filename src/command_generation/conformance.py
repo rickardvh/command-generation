@@ -6,7 +6,7 @@ import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 
 SelectedFields = Callable[[str], dict[str, object]]
@@ -89,7 +89,8 @@ def selected_contract_fields(stdout: str, assertions: Sequence[Mapping[str, obje
         path = assertion.get("path", [])
         if not isinstance(path, list) or not all(isinstance(part, str) for part in path):
             raise ValueError(f"conformance assertion path is malformed: {path!r}")
-        selected[".".join(path)] = _field_value(payload, path)
+        field_path = [str(part) for part in path]
+        selected[".".join(field_path)] = _field_value(payload, field_path)
     return selected
 
 
@@ -99,7 +100,7 @@ def expected_contract_fields(assertions: Sequence[Mapping[str, object]]) -> dict
         path = assertion.get("path", [])
         if not isinstance(path, list) or not all(isinstance(part, str) for part in path):
             raise ValueError(f"conformance assertion path is malformed: {path!r}")
-        expected[".".join(path)] = assertion.get("equals")
+        expected[".".join(str(part) for part in path)] = assertion.get("equals")
     return expected
 
 
@@ -197,25 +198,27 @@ def _success_args_from_contract(*, contract: Mapping[str, object], command_place
     template = adapter.get("command_template", [])
     if not isinstance(template, list) or not all(isinstance(token, str) for token in template):
         raise ValueError(f"conformance contract {contract.get('id')!r} has malformed command_template")
+    tokens = [str(token) for token in template]
     expected_placeholder = "{" + command_placeholder + "}"
-    if not template or template[0] != expected_placeholder:
+    if not tokens or tokens[0] != expected_placeholder:
         raise ValueError(
-            f"conformance contract {contract.get('id')!r} starts with {template[0] if template else None!r}, "
+            f"conformance contract {contract.get('id')!r} starts with {tokens[0] if tokens else None!r}, "
             f"expected {expected_placeholder!r}"
         )
-    return template[1:]
+    return tokens[1:]
 
 
 def _fixture_from_contract(contract: Mapping[str, object]) -> tuple[str, dict[str, str]]:
     fixtures = contract.get("fixtures", [])
     if not isinstance(fixtures, list) or not fixtures or not isinstance(fixtures[0], Mapping):
         raise ValueError(f"conformance contract {contract.get('id')!r} has no usable fixture")
-    fixture = fixtures[0]
+    fixture = cast(Mapping[str, object], fixtures[0])
     fixture_id = fixture.get("id")
     files = fixture.get("files")
     if not isinstance(fixture_id, str) or not isinstance(files, Mapping) or not all(isinstance(key, str) for key in files):
         raise ValueError(f"conformance contract {contract.get('id')!r} fixture is malformed")
-    return fixture_id, {path: str(contents) for path, contents in files.items()}
+    fixture_files = cast(Mapping[str, object], files)
+    return fixture_id, {path: str(contents) for path, contents in fixture_files.items()}
 
 
 def _expected_exit_from_contract(contract: Mapping[str, object]) -> int:
@@ -234,19 +237,19 @@ def _allow_stderr_from_contract(contract: Mapping[str, object]) -> bool:
 def _assertions(value: object, *, contract_id: str) -> list[Mapping[str, object]]:
     if not isinstance(value, list) or not all(isinstance(assertion, Mapping) for assertion in value):
         raise ValueError(f"conformance contract {contract_id!r} has malformed field_assertions")
-    return list(value)
+    return [cast(Mapping[str, object], assertion) for assertion in value]
 
 
 def _field_value(payload: object, path: list[str]) -> object:
     current = payload
     for part in path:
-        if not isinstance(current, dict) or part not in current:
+        if not isinstance(current, Mapping) or part not in current:
             raise KeyError(".".join(path))
-        current = current[part]
+        current = cast(Mapping[str, object], current)[part]
     return current
 
 
 def _mapping(value: object) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise ValueError(f"expected mapping, got {type(value).__name__}")
-    return value
+    return cast(Mapping[str, object], value)
