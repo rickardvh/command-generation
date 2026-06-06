@@ -10,11 +10,13 @@ import pytest
 from command_generation import (
     BUILTIN_PORTABLE_PRIMITIVES,
     CommandGenerationHostManifest,
+    GeneratedOutput,
     PrimitiveContext,
     PrimitiveRegistry,
     command_package_schema_path,
     execute_primitive,
     generate_command_packages,
+    generated_output_freshness_report,
     load_command_package_ir,
     render_outputs,
 )
@@ -248,6 +250,33 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["item_count"] == 2
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
+
+
+def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family(tmp_path: Path) -> None:
+    py_path = tmp_path / "out" / "python" / "cli.py"
+    ts_path = tmp_path / "out" / "typescript" / "cli.mjs"
+    py_path.parent.mkdir(parents=True)
+    ts_path.parent.mkdir(parents=True)
+    py_path.write_text("print('fresh')\n", encoding="utf-8")
+    ts_path.write_text("stale\n", encoding="utf-8")
+
+    report = generated_output_freshness_report(
+        [
+            GeneratedOutput(path=py_path, content="print('fresh')\n"),
+            GeneratedOutput(path=ts_path, content="console.log('fresh');\n"),
+        ],
+        repo_root=tmp_path,
+        required_target_families=("python", "typescript"),
+        target_family_for_path=lambda path: path.parent.name,
+    )
+
+    assert report["status"] == "stale-or-incomplete"
+    assert report["rendered_output_count_by_family"] == {"python": 1, "typescript": 1}
+    assert report["stale_output_count_by_family"] == {"typescript": 1}
+    assert report["stale_outputs_by_family"] == {"typescript": ["out/typescript/cli.mjs"]}
+    assert report["missing_target_families"] == []
+    assert set(report["expected_digest_by_family"]) == {"python", "typescript"}
+    assert "do not rewrite generated files" in report["cheap_check_rule"]
 
 
 def test_generic_generator_source_has_no_aw_product_literals() -> None:

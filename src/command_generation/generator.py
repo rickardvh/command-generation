@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from command_generation.host_manifest import CommandGenerationHostManifest
 from command_generation.primitive_registry import BUILTIN_PORTABLE_PRIMITIVES, PrimitiveRegistry
@@ -13,6 +14,58 @@ from command_generation.primitive_registry import BUILTIN_PORTABLE_PRIMITIVES, P
 class GeneratedOutput:
     path: Path
     content: str
+
+
+TargetFamilyClassifier = Callable[[Path], str | None]
+
+
+def generated_output_freshness_report(
+    outputs: list[GeneratedOutput],
+    *,
+    repo_root: Path,
+    required_target_families: list[str] | tuple[str, ...] = (),
+    target_family_for_path: TargetFamilyClassifier | None = None,
+) -> dict[str, Any]:
+    """Summarize generated-output freshness without rewriting files.
+
+    Hosts may provide target_family_for_path when their output layout has target
+    families such as Python or TypeScript. The helper owns the generic compare,
+    count, and digest mechanics; host repos own path classification semantics.
+    """
+
+    counts_by_family: dict[str, int] = {}
+    stale_by_family: dict[str, list[str]] = {}
+    digest_inputs_by_family: dict[str, list[str]] = {}
+    for output in outputs:
+        relative_path = output.path.relative_to(repo_root).as_posix()
+        family = target_family_for_path(output.path) if target_family_for_path else None
+        family_key = family or "unclassified"
+        counts_by_family[family_key] = counts_by_family.get(family_key, 0) + 1
+        digest_inputs_by_family.setdefault(family_key, []).append(f"{relative_path}\0{output.content}")
+        current = output.path.read_text(encoding="utf-8") if output.path.is_file() else None
+        if current != output.content:
+            stale_by_family.setdefault(family_key, []).append(relative_path)
+
+    digests_by_family: dict[str, str] = {}
+    for family, digest_inputs in digest_inputs_by_family.items():
+        digest = hashlib.sha256()
+        for item in sorted(digest_inputs):
+            digest.update(item.encode("utf-8"))
+            digest.update(b"\0")
+        digests_by_family[family] = digest.hexdigest()[:16]
+
+    missing_families = [family for family in required_target_families if counts_by_family.get(family, 0) == 0]
+    return {
+        "status": "fresh" if not stale_by_family and not missing_families else "stale-or-incomplete",
+        "rendered_output_count": len(outputs),
+        "rendered_output_count_by_family": dict(sorted(counts_by_family.items())),
+        "expected_digest_by_family": dict(sorted(digests_by_family.items())),
+        "stale_output_count_by_family": {family: len(paths) for family, paths in sorted(stale_by_family.items())},
+        "stale_outputs_by_family": {family: paths for family, paths in sorted(stale_by_family.items())},
+        "required_target_families": list(required_target_families),
+        "missing_target_families": missing_families,
+        "cheap_check_rule": "Freshness checks compare rendered outputs in memory and do not rewrite generated files.",
+    }
 
 
 def _json_block(payload: object) -> str:
