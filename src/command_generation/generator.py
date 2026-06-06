@@ -303,12 +303,7 @@ def _validate_target_primitive_support(
     for command in _python_adapter_commands(package):
         for operation_ref in _command_operation_refs(command):
             operation = _operation_for_ref(package, operation_ref, repo_root=repo_root)
-            steps = operation.get("ir_plan", {}).get("steps", [])
-            if not isinstance(steps, list):
-                continue
-            for step in steps:
-                if not isinstance(step, dict):
-                    continue
+            for step in _operation_ir_primitive_steps(operation):
                 primitive_id = str(step.get("uses", ""))
                 try:
                     registry.ensure_supported(primitive_id, target_kind)
@@ -316,6 +311,59 @@ def _validate_target_primitive_support(
                     errors.append(f"{package.get('id')}:{operation.get('id')}:{primitive_id}: {exc}")
     if errors:
         raise ValueError("unsupported command-generation primitive target support:\n" + "\n".join(errors))
+
+
+def _operation_ir_primitive_steps(operation: dict[str, Any]) -> list[dict[str, Any]]:
+    ir_plan = operation.get("ir_plan", {})
+    if not isinstance(ir_plan, dict):
+        return []
+    fragments = _operation_ir_fragments(ir_plan)
+    steps = ir_plan.get("steps", [])
+    if not isinstance(steps, list):
+        return []
+    return _expand_operation_ir_primitive_steps(steps, fragments=fragments)
+
+
+def _operation_ir_fragments(ir_plan: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    raw_fragments = ir_plan.get("fragments", [])
+    if not isinstance(raw_fragments, list):
+        return {}
+    fragments: dict[str, list[dict[str, Any]]] = {}
+    for raw_fragment in raw_fragments:
+        if not isinstance(raw_fragment, dict):
+            continue
+        fragment_id = str(raw_fragment.get("id", "")).strip()
+        fragment_steps = raw_fragment.get("steps", [])
+        if fragment_id and isinstance(fragment_steps, list):
+            fragments[fragment_id] = [step for step in fragment_steps if isinstance(step, dict)]
+    return fragments
+
+
+def _expand_operation_ir_primitive_steps(
+    steps: list[Any],
+    *,
+    fragments: dict[str, list[dict[str, Any]]],
+    stack: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
+    expanded: list[dict[str, Any]] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        primitive_id = str(step.get("uses", "")).strip()
+        fragment_id = str(step.get("uses_fragment", "")).strip()
+        if primitive_id:
+            expanded.append(step)
+            continue
+        if not fragment_id or fragment_id in stack:
+            continue
+        expanded.extend(
+            _expand_operation_ir_primitive_steps(
+                fragments.get(fragment_id, []),
+                fragments=fragments,
+                stack=(*stack, fragment_id),
+            )
+        )
+    return expanded
 
 
 def _typescript_resource_copy_outputs(
