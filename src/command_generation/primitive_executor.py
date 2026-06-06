@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .operation_composition import expand_operation_steps, operation_fragments
+
 
 class PrimitiveExecutionError(RuntimeError):
     pass
@@ -42,8 +44,8 @@ def run_operation_steps(
     steps = operation.get("ir_plan", {}).get("steps", [])
     if not isinstance(steps, list):
         raise PrimitiveExecutionError("operation ir_plan.steps must be a list")
-    fragments = _operation_fragments(operation)
-    for raw_step in _expand_operation_steps(steps, fragments=fragments):
+    fragments = operation_fragments(operation, error_type=PrimitiveExecutionError)
+    for raw_step in expand_operation_steps(steps, fragments=fragments, error_type=PrimitiveExecutionError):
         primitive = str(raw_step.get("uses", ""))
         arguments = raw_step.get("arguments", {})
         if not isinstance(arguments, dict):
@@ -58,62 +60,6 @@ def run_operation_steps(
         )
         _store_step_result(values=values, outputs=raw_step.get("outputs", []), result=result)
     return values
-
-
-def _operation_fragments(operation: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-    raw_fragments = operation.get("ir_plan", {}).get("fragments", [])
-    if raw_fragments in (None, []):
-        return {}
-    if not isinstance(raw_fragments, list):
-        raise PrimitiveExecutionError("operation ir_plan.fragments must be a list")
-    fragments: dict[str, list[dict[str, Any]]] = {}
-    for raw_fragment in raw_fragments:
-        if not isinstance(raw_fragment, dict):
-            raise PrimitiveExecutionError("operation ir_plan fragment must be an object")
-        fragment_id = str(raw_fragment.get("id", "")).strip()
-        if not fragment_id:
-            raise PrimitiveExecutionError("operation ir_plan fragment id is required")
-        if fragment_id in fragments:
-            raise PrimitiveExecutionError(f"duplicate operation ir_plan fragment: {fragment_id!r}")
-        fragment_steps = raw_fragment.get("steps", [])
-        if not isinstance(fragment_steps, list) or not fragment_steps:
-            raise PrimitiveExecutionError(f"operation ir_plan fragment {fragment_id!r} must declare non-empty steps")
-        fragments[fragment_id] = fragment_steps
-    return fragments
-
-
-def _expand_operation_steps(
-    steps: Sequence[Any],
-    *,
-    fragments: Mapping[str, list[dict[str, Any]]],
-    stack: tuple[str, ...] = (),
-) -> list[dict[str, Any]]:
-    expanded: list[dict[str, Any]] = []
-    for raw_step in steps:
-        if not isinstance(raw_step, dict):
-            raise PrimitiveExecutionError("operation ir_plan step must be an object")
-        uses = str(raw_step.get("uses", "")).strip()
-        uses_fragment = str(raw_step.get("uses_fragment", "")).strip()
-        if uses and uses_fragment:
-            raise PrimitiveExecutionError(f"step {raw_step.get('id', uses)!r} cannot declare both uses and uses_fragment")
-        if uses_fragment:
-            if raw_step.get("arguments") not in (None, {}):
-                raise PrimitiveExecutionError(f"fragment step {raw_step.get('id', uses_fragment)!r} cannot declare arguments")
-            if raw_step.get("outputs") not in (None, []):
-                raise PrimitiveExecutionError(f"fragment step {raw_step.get('id', uses_fragment)!r} cannot declare outputs")
-            if uses_fragment in stack:
-                cycle = " -> ".join((*stack, uses_fragment))
-                raise PrimitiveExecutionError(f"operation ir_plan fragment cycle: {cycle}")
-            try:
-                fragment_steps = fragments[uses_fragment]
-            except KeyError as exc:
-                raise PrimitiveExecutionError(f"unknown operation ir_plan fragment: {uses_fragment!r}") from exc
-            expanded.extend(_expand_operation_steps(fragment_steps, fragments=fragments, stack=(*stack, uses_fragment)))
-            continue
-        if not uses:
-            raise PrimitiveExecutionError(f"step {raw_step.get('id', '<unknown>')!r} must declare uses or uses_fragment")
-        expanded.append(raw_step)
-    return expanded
 
 
 def execute_primitive(

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from command_generation.host_manifest import CommandGenerationHostManifest
+from command_generation.operation_composition import expand_operation_steps, operation_fragments
 from command_generation.primitive_registry import BUILTIN_PORTABLE_PRIMITIVES, PrimitiveRegistry
 
 
@@ -317,53 +318,11 @@ def _operation_ir_primitive_steps(operation: dict[str, Any]) -> list[dict[str, A
     ir_plan = operation.get("ir_plan", {})
     if not isinstance(ir_plan, dict):
         return []
-    fragments = _operation_ir_fragments(ir_plan)
     steps = ir_plan.get("steps", [])
     if not isinstance(steps, list):
         return []
-    return _expand_operation_ir_primitive_steps(steps, fragments=fragments)
-
-
-def _operation_ir_fragments(ir_plan: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-    raw_fragments = ir_plan.get("fragments", [])
-    if not isinstance(raw_fragments, list):
-        return {}
-    fragments: dict[str, list[dict[str, Any]]] = {}
-    for raw_fragment in raw_fragments:
-        if not isinstance(raw_fragment, dict):
-            continue
-        fragment_id = str(raw_fragment.get("id", "")).strip()
-        fragment_steps = raw_fragment.get("steps", [])
-        if fragment_id and isinstance(fragment_steps, list):
-            fragments[fragment_id] = [step for step in fragment_steps if isinstance(step, dict)]
-    return fragments
-
-
-def _expand_operation_ir_primitive_steps(
-    steps: list[Any],
-    *,
-    fragments: dict[str, list[dict[str, Any]]],
-    stack: tuple[str, ...] = (),
-) -> list[dict[str, Any]]:
-    expanded: list[dict[str, Any]] = []
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        primitive_id = str(step.get("uses", "")).strip()
-        fragment_id = str(step.get("uses_fragment", "")).strip()
-        if primitive_id:
-            expanded.append(step)
-            continue
-        if not fragment_id or fragment_id in stack:
-            continue
-        expanded.extend(
-            _expand_operation_ir_primitive_steps(
-                fragments.get(fragment_id, []),
-                fragments=fragments,
-                stack=(*stack, fragment_id),
-            )
-        )
-    return expanded
+    fragments = operation_fragments(operation, error_type=ValueError)
+    return expand_operation_steps(steps, fragments=fragments, error_type=ValueError)
 
 
 def _typescript_resource_copy_outputs(
@@ -600,6 +559,21 @@ def _python_primitive_executor_module(*, source_path: str, regenerate_command: s
         "# Primitive behavior changes belong in command_generation.primitive_executor.\n"
         f"# Regenerate with: {regenerate_command}\n\n"
         f"{primitive_executor}"
+    )
+
+
+def _python_operation_composition_module(*, source_path: str, regenerate_command: str) -> str:
+    operation_composition_path = Path(__file__).with_name("operation_composition.py")
+    operation_composition = operation_composition_path.read_text(encoding="utf-8")
+    return (
+        '"""Generated target-local operation composition helpers.\n\n'
+        f"Source: {source_path}\n"
+        f"Regenerate with: {regenerate_command}\n"
+        '"""\n\n'
+        "# DO NOT EDIT DIRECTLY.\n"
+        "# Operation composition behavior changes belong in command_generation.operation_composition.\n"
+        f"# Regenerate with: {regenerate_command}\n\n"
+        f"{operation_composition}"
     )
 
 
@@ -2623,6 +2597,12 @@ def render_outputs(
                             GeneratedOutput(
                                 root / "primitives" / "primitive_executor.py",
                                 _python_primitive_executor_module(source_path=source_path, regenerate_command=regenerate_command),
+                            )
+                        )
+                        outputs.append(
+                            GeneratedOutput(
+                                root / "primitives" / "operation_composition.py",
+                                _python_operation_composition_module(source_path=source_path, regenerate_command=regenerate_command),
                             )
                         )
                         outputs.append(
