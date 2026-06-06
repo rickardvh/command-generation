@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from command_generation.host_manifest import CommandGenerationHostManifest
+from command_generation.operation_composition import expand_operation_steps, operation_fragments
 from command_generation.primitive_registry import BUILTIN_PORTABLE_PRIMITIVES, PrimitiveRegistry
 
 
@@ -303,12 +304,7 @@ def _validate_target_primitive_support(
     for command in _python_adapter_commands(package):
         for operation_ref in _command_operation_refs(command):
             operation = _operation_for_ref(package, operation_ref, repo_root=repo_root)
-            steps = operation.get("ir_plan", {}).get("steps", [])
-            if not isinstance(steps, list):
-                continue
-            for step in steps:
-                if not isinstance(step, dict):
-                    continue
+            for step in _operation_ir_primitive_steps(operation):
                 primitive_id = str(step.get("uses", ""))
                 try:
                     registry.ensure_supported(primitive_id, target_kind)
@@ -316,6 +312,17 @@ def _validate_target_primitive_support(
                     errors.append(f"{package.get('id')}:{operation.get('id')}:{primitive_id}: {exc}")
     if errors:
         raise ValueError("unsupported command-generation primitive target support:\n" + "\n".join(errors))
+
+
+def _operation_ir_primitive_steps(operation: dict[str, Any]) -> list[dict[str, Any]]:
+    ir_plan = operation.get("ir_plan", {})
+    if not isinstance(ir_plan, dict):
+        return []
+    steps = ir_plan.get("steps", [])
+    if not isinstance(steps, list):
+        return []
+    fragments = operation_fragments(operation, error_type=ValueError)
+    return expand_operation_steps(steps, fragments=fragments, error_type=ValueError)
 
 
 def _typescript_resource_copy_outputs(
@@ -552,6 +559,21 @@ def _python_primitive_executor_module(*, source_path: str, regenerate_command: s
         "# Primitive behavior changes belong in command_generation.primitive_executor.\n"
         f"# Regenerate with: {regenerate_command}\n\n"
         f"{primitive_executor}"
+    )
+
+
+def _python_operation_composition_module(*, source_path: str, regenerate_command: str) -> str:
+    operation_composition_path = Path(__file__).with_name("operation_composition.py")
+    operation_composition = operation_composition_path.read_text(encoding="utf-8")
+    return (
+        '"""Generated target-local operation composition helpers.\n\n'
+        f"Source: {source_path}\n"
+        f"Regenerate with: {regenerate_command}\n"
+        '"""\n\n'
+        "# DO NOT EDIT DIRECTLY.\n"
+        "# Operation composition behavior changes belong in command_generation.operation_composition.\n"
+        f"# Regenerate with: {regenerate_command}\n\n"
+        f"{operation_composition}"
     )
 
 
@@ -2088,11 +2110,53 @@ function executePrimitive(primitive, values, args, operationId) {{
   return executeHostPrimitive(primitive, values, args, operationId);
 }}
 
+function operationFragments(operation) {{
+  const rawFragments = operation?.ir_plan?.fragments ?? [];
+  if (!Array.isArray(rawFragments)) throw new RuntimeError('operation ir_plan.fragments must be a list');
+  const fragments = new Map();
+  for (const fragment of rawFragments) {{
+    if (!isObject(fragment)) throw new RuntimeError('operation ir_plan fragment must be an object');
+    const fragmentId = String(fragment.id ?? '').trim();
+    if (!fragmentId) throw new RuntimeError('operation ir_plan fragment id is required');
+    if (fragments.has(fragmentId)) throw new RuntimeError(`duplicate operation ir_plan fragment: ${{fragmentId}}`);
+    if (!Array.isArray(fragment.steps) || fragment.steps.length === 0) {{
+      throw new RuntimeError(`operation ir_plan fragment ${{fragmentId}} must declare non-empty steps`);
+    }}
+    fragments.set(fragmentId, fragment.steps);
+  }}
+  return fragments;
+}}
+
+function expandOperationSteps(steps, fragments, stack = []) {{
+  const expanded = [];
+  for (const step of steps) {{
+    if (!isObject(step)) throw new RuntimeError('operation ir_plan step must be an object');
+    const uses = String(step.uses ?? '').trim();
+    const usesFragment = String(step.uses_fragment ?? '').trim();
+    if (uses && usesFragment) throw new RuntimeError(`step ${{String(step.id ?? uses)}} cannot declare both uses and uses_fragment`);
+    if (usesFragment) {{
+      if (step.arguments !== undefined && !(isObject(step.arguments) && Object.keys(step.arguments).length === 0)) {{
+        throw new RuntimeError(`fragment step ${{String(step.id ?? usesFragment)}} cannot declare arguments`);
+      }}
+      if (step.outputs !== undefined && !(Array.isArray(step.outputs) && step.outputs.length === 0)) {{
+        throw new RuntimeError(`fragment step ${{String(step.id ?? usesFragment)}} cannot declare outputs`);
+      }}
+      if (stack.includes(usesFragment)) throw new RuntimeError(`operation ir_plan fragment cycle: ${{[...stack, usesFragment].join(' -> ')}}`);
+      if (!fragments.has(usesFragment)) throw new RuntimeError(`unknown operation ir_plan fragment: ${{usesFragment}}`);
+      expanded.push(...expandOperationSteps(fragments.get(usesFragment), fragments, [...stack, usesFragment]));
+      continue;
+    }}
+    if (!uses) throw new RuntimeError(`step ${{String(step.id ?? '<unknown>')}} must declare uses or uses_fragment`);
+    expanded.push(step);
+  }}
+  return expanded;
+}}
+
 function runSteps(operation, values) {{
   const steps = operation?.ir_plan?.steps;
   if (!Array.isArray(steps) || steps.length === 0) throw new RuntimeError(`operation ${{operation?.id ?? '<unknown>'}} has no executable ir_plan.steps`);
-  for (const step of steps) {{
-    if (!isObject(step)) throw new RuntimeError('operation ir_plan step must be an object');
+  const fragments = operationFragments(operation);
+  for (const step of expandOperationSteps(steps, fragments)) {{
     if (!conditionMatches(step.when, values)) continue;
     const result = executePrimitive(String(step.uses ?? ''), values, isObject(step.arguments) ? step.arguments : {{}}, String(operation.id ?? ''));
     storeStepResult(values, step.outputs ?? [], result);
@@ -2533,6 +2597,12 @@ def render_outputs(
                             GeneratedOutput(
                                 root / "primitives" / "primitive_executor.py",
                                 _python_primitive_executor_module(source_path=source_path, regenerate_command=regenerate_command),
+                            )
+                        )
+                        outputs.append(
+                            GeneratedOutput(
+                                root / "primitives" / "operation_composition.py",
+                                _python_operation_composition_module(source_path=source_path, regenerate_command=regenerate_command),
                             )
                         )
                         outputs.append(

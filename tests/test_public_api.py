@@ -367,6 +367,48 @@ def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
         )
 
 
+def test_primitive_registry_checks_steps_inside_fragments(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    read_step = operation["ir_plan"]["steps"].pop(0)
+    operation["ir_plan"]["fragments"] = [
+        {
+            "id": "load-todos",
+            "description": "Load todo source data.",
+            "steps": [read_step],
+        }
+    ]
+    operation["ir_plan"]["steps"].insert(
+        0,
+        {
+            "id": "load",
+            "uses_fragment": "load-todos",
+            "description": "Load todo data through a fragment.",
+        },
+    )
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    registry = PrimitiveRegistry.from_definitions(
+        [
+            {
+                "id": "filesystem.read",
+                "kind": "portable",
+                "target_support": {"python": "unsupported"},
+                "unsupported_targets": {"python": "fixture intentionally disables file reads"},
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="filesystem.read"):
+        render_outputs(
+            manifest,
+            repo_root=tmp_path,
+            source_path="command_package_ir.json",
+            regenerate_command="python generate.py",
+            host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+        )
+
+
 def test_primitive_registry_round_trips_host_metadata() -> None:
     registry = PrimitiveRegistry.from_definitions(
         [

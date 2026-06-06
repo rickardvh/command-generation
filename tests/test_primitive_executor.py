@@ -250,6 +250,65 @@ def test_payload_assemble_supports_template_field_selectors(primitive_context: P
     assert payload == {"status": "present", "nested": {"note_count": 3, "required_count": 1}}
 
 
+def test_operation_fragments_compose_reusable_step_groups(primitive_context: PrimitiveContext) -> None:
+    operation = {
+        "id": "fixture.report",
+        "ir_plan": {
+            "fragments": [
+                {
+                    "id": "load-fixture",
+                    "steps": [
+                        {
+                            "id": "make_result",
+                            "uses": "fixture.make-result",
+                            "description": "Create a fixture payload.",
+                            "outputs": ["result"],
+                        }
+                    ],
+                }
+            ],
+            "steps": [
+                {
+                    "id": "load",
+                    "uses_fragment": "load-fixture",
+                    "description": "Reuse the fixture loading fragment.",
+                },
+                {
+                    "id": "emit",
+                    "uses": "output.emit",
+                    "description": "Emit the fixture payload.",
+                    "outputs": ["emitted"],
+                },
+            ],
+        },
+    }
+
+    values = run_operation_steps(
+        operation,
+        initial_values={"format": "json"},
+        context=primitive_context,
+        handlers={"fixture.make-result": lambda values, arguments, context: {"status": "ok"}},
+    )
+
+    assert json.loads(values["emitted"]) == {"status": "ok"}
+
+
+def test_operation_fragments_reject_cycles(primitive_context: PrimitiveContext) -> None:
+    operation = {
+        "id": "fixture.report",
+        "ir_plan": {
+            "fragments": [
+                {"id": "a", "steps": [{"id": "call_b", "uses_fragment": "b", "description": "Call b."}]},
+                {"id": "b", "steps": [{"id": "call_a", "uses_fragment": "a", "description": "Call a."}]},
+            ],
+            "steps": [{"id": "call_a", "uses_fragment": "a", "description": "Call a."}],
+        },
+    }
+
+    with pytest.raises(PrimitiveExecutionError, match="operation ir_plan fragment cycle: a -> b -> a"):
+        run_operation_steps(operation, initial_values={}, context=primitive_context)
+
+
 def test_payload_verify_executes_declarative_policy(tmp_path: Path) -> None:
     contracts = tmp_path / "contracts"
     payload = tmp_path / "payload"
