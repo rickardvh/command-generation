@@ -10,5 +10,13 @@ Public API:
 - `generate_command_packages(..., check=True|False)` checks or writes generated files.
 - `CommandGenerationHostManifest` declares host roots, custom primitive registry entries, target bindings, and optional host-owned runtime support.
 - `PrimitiveRegistry` and `PrimitiveDefinition` describe portable or host-owned primitives with target support.
+- `process_case_from_contract(...)`, `CliConformanceTarget`, and `run_cli_conformance_case(...)` provide the generic black-box runner for contract-owned conformance cases.
 
 Hosts keep product-specific contracts, primitive implementations, and generated output ownership in their own repositories. The package owns generic rendering, schema loading, primitive registry validation, and portable primitive execution helpers.
+
+Conformance strategy:
+
+- Store behavior examples in host-owned contract resources as stable input/expected-output cases.
+- Keep target differences in thin adapters such as generated Python CLI, generated TypeScript CLI, or a future MCP adapter.
+- Run the same contract case through the authoritative Python runner, then compare normalized exit, stdout fields, stderr policy, and fixture state.
+- Add new one-off tests only for runner internals or target adapter mechanics; command behavior should be represented by contract cases first.
