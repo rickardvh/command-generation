@@ -1873,6 +1873,8 @@ def _typescript_native_runtime_helpers(*, recovery_command: str) -> str:
 def _host_runtime_support_label(*, host_manifest: CommandGenerationHostManifest, support_path: Path) -> str:
     if not support_path.is_absolute():
         return support_path.as_posix()
+    if host_manifest.generated_root is None:
+        return support_path.name
     try:
         return support_path.resolve().relative_to(host_manifest.generated_root.resolve().parent).as_posix()
     except ValueError:
@@ -2389,15 +2391,6 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
     if sample_supports_dry_run:
         sample_json_args.insert(1, "--dry-run")
         sample_spaced_args.insert(1, "--dry-run")
-    native_operation_ids = _typescript_native_operation_ids(package)
-    native_command = next(
-        (
-            str(command["command"]["name"])
-            for command in package["commands"]
-            if str(command.get("operation_ref", {}).get("id", "")) in native_operation_ids
-        ),
-        None,
-    )
     required_case = _typescript_required_option_case(package)
     runnable = _is_runnable_typescript_target(target)
     expected_maturity = target["maturity_level_ref"]
