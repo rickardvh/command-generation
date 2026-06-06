@@ -9,6 +9,7 @@ import pytest
 
 from command_generation import (
     BUILTIN_PORTABLE_PRIMITIVES,
+    CliConformanceTarget,
     CommandGenerationHostManifest,
     GeneratedOutput,
     PrimitiveContext,
@@ -18,7 +19,10 @@ from command_generation import (
     generate_command_packages,
     generated_output_freshness_report,
     load_command_package_ir,
+    materialize_case_fixture,
+    process_case_from_contract,
     render_outputs,
+    run_cli_conformance_case,
 )
 
 
@@ -250,6 +254,92 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["item_count"] == 2
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
+
+
+def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> None:
+    contract = {
+        "id": "todo.list.process",
+        "operation_id": "todo.list.report",
+        "adapter": {
+            "kind": "process",
+            "command_template": ["{todo_cli}", "list", "--format", "json"],
+            "cwd": "fixture_root",
+        },
+        "fixtures": [
+            {
+                "id": "minimal-repo",
+                "files": {"README.md": "# Fixture\n"},
+            }
+        ],
+        "expectations": {
+            "exit": {"code": 0},
+            "stdout": {
+                "format": "json",
+                "field_assertions": [
+                    {"path": ["kind"], "equals": "todo-list/v1"},
+                    {"path": ["item_count"], "equals": 2},
+                ],
+            },
+            "stderr": {"allow_non_empty": False},
+        },
+    }
+    cli = tmp_path / "todo_cli.py"
+    cli.write_text(
+        "import json\n"
+        "import sys\n"
+        "if sys.argv[1:] != ['list', '--format', 'json']:\n"
+        "    raise SystemExit(2)\n"
+        "print(json.dumps({'kind': 'todo-list/v1', 'item_count': 2}))\n",
+        encoding="utf-8",
+    )
+    case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
+    fixture_root = materialize_case_fixture(case=case, root=tmp_path / "fixtures")
+
+    result, failures = run_cli_conformance_case(
+        case=case,
+        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        fixture_root=fixture_root,
+    )
+
+    assert failures == []
+    assert result is not None
+    assert result.command[-3:] == ("list", "--format", "json")
+    assert result.selected_fields == {"kind": "todo-list/v1", "item_count": 2}
+
+
+def test_contract_owned_conformance_case_reports_output_drift(tmp_path: Path) -> None:
+    contract = {
+        "id": "todo.list.process",
+        "operation_id": "todo.list.report",
+        "adapter": {
+            "kind": "process",
+            "command_template": ["{todo_cli}", "list", "--format", "json"],
+            "cwd": "fixture_root",
+        },
+        "fixtures": [{"id": "minimal-repo", "files": {}}],
+        "expectations": {
+            "exit": {"code": 0},
+            "stdout": {
+                "format": "json",
+                "field_assertions": [{"path": ["item_count"], "equals": 2}],
+            },
+            "stderr": {"allow_non_empty": False},
+        },
+    }
+    cli = tmp_path / "todo_cli.py"
+    cli.write_text("import json\nprint(json.dumps({'item_count': 3}))\n", encoding="utf-8")
+    case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
+    fixture_root = materialize_case_fixture(case=case, root=tmp_path / "fixtures")
+
+    _result, failures = run_cli_conformance_case(
+        case=case,
+        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        fixture_root=fixture_root,
+    )
+
+    assert len(failures) == 1
+    assert failures[0].conformance_ref == "todo.list.process"
+    assert "output shape drifted" in failures[0].message
 
 
 def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family(tmp_path: Path) -> None:
