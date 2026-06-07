@@ -18,5 +18,5 @@ Conformance strategy:
 
 - Store behavior examples in host-owned contract resources as stable input/expected-output cases.
 - Keep target differences in thin adapters such as generated Python CLI, generated TypeScript CLI, or a future MCP adapter.
-- Run the same contract case through the authoritative Python runner, then compare normalized exit, stdout fields, stderr policy, and fixture state.
+- Run the same contract case through the authoritative Python runner, then compare normalized exit, stdout fields or required text substrings, stderr policy, and fixture state.
 - Add new one-off tests only for runner internals or target adapter mechanics; command behavior should be represented by contract cases first.

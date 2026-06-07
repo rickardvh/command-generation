@@ -19,6 +19,7 @@ class ProcessConformanceCase:
     success_args: tuple[str, ...]
     selected_fields: SelectedFields
     expected_fields: dict[str, object] | None
+    stdout_contains: tuple[str, ...]
     fixture_id: str
     fixture_files: dict[str, str]
     expected_exit: int
@@ -62,6 +63,7 @@ def process_case_from_contract(
     expectations = _mapping(contract.get("expectations", {}))
     stdout = _mapping(expectations.get("stdout", {}))
     assertions = _assertions(stdout.get("field_assertions", []), contract_id=str(contract.get("id", "")))
+    stdout_contains = _strings(stdout.get("contains", []), contract_id=str(contract.get("id", "")), field_name="stdout.contains")
     fixture_id, fixture_files = _fixture_from_contract(contract)
     contract_id = str(contract.get("id", ""))
     return ProcessConformanceCase(
@@ -73,6 +75,7 @@ def process_case_from_contract(
             contract_assertions,
         ),
         expected_fields=expected_contract_fields(assertions),
+        stdout_contains=tuple(stdout_contains),
         fixture_id=fixture_id,
         fixture_files=fixture_files,
         expected_exit=_expected_exit_from_contract(contract),
@@ -179,6 +182,19 @@ def run_cli_conformance_case(
                         ),
                     )
                 )
+    if case.stdout_contains and not failures:
+        missing = [expected for expected in case.stdout_contains if expected not in process.stdout]
+        if missing:
+            failures.append(
+                CliConformanceFailure(
+                    target=target.label,
+                    conformance_ref=case.conformance_ref,
+                    message=(
+                        f"{target.label} {case.label} stdout text drifted from contract; "
+                        f"missing substrings {missing!r}; stdout={process.stdout!r}"
+                    ),
+                )
+            )
     return (
         CliConformanceResult(
             target=target.label,
@@ -238,6 +254,12 @@ def _assertions(value: object, *, contract_id: str) -> list[Mapping[str, object]
     if not isinstance(value, list) or not all(isinstance(assertion, Mapping) for assertion in value):
         raise ValueError(f"conformance contract {contract_id!r} has malformed field_assertions")
     return [cast(Mapping[str, object], assertion) for assertion in value]
+
+
+def _strings(value: object, *, contract_id: str, field_name: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"conformance contract {contract_id!r} has malformed {field_name}")
+    return [str(item) for item in value]
 
 
 def _field_value(payload: object, path: list[str]) -> object:
