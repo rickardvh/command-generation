@@ -342,6 +342,79 @@ def test_contract_owned_conformance_case_reports_output_drift(tmp_path: Path) ->
     assert "output shape drifted" in failures[0].message
 
 
+def test_contract_owned_conformance_case_checks_text_stdout(tmp_path: Path) -> None:
+    contract = {
+        "id": "todo.list-text.process",
+        "operation_id": "todo.list.report",
+        "adapter": {
+            "kind": "process",
+            "command_template": ["{todo_cli}", "list", "--format", "text"],
+            "cwd": "fixture_root",
+        },
+        "fixtures": [{"id": "minimal-repo", "files": {}}],
+        "expectations": {
+            "exit": {"code": 0},
+            "stdout": {
+                "format": "text",
+                "field_assertions": [],
+                "contains": ["Todo items:", "- Write contract-owned test"],
+            },
+            "stderr": {"allow_non_empty": False},
+        },
+    }
+    cli = tmp_path / "todo_cli.py"
+    cli.write_text("print('Todo items:\\n- Write contract-owned test')\n", encoding="utf-8")
+    case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
+    fixture_root = materialize_case_fixture(case=case, root=tmp_path / "fixtures")
+
+    result, failures = run_cli_conformance_case(
+        case=case,
+        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        fixture_root=fixture_root,
+    )
+
+    assert failures == []
+    assert result is not None
+    assert result.stdout == "Todo items:\n- Write contract-owned test\n"
+
+
+def test_contract_owned_conformance_case_reports_text_stdout_drift(tmp_path: Path) -> None:
+    contract = {
+        "id": "todo.list-text.process",
+        "operation_id": "todo.list.report",
+        "adapter": {
+            "kind": "process",
+            "command_template": ["{todo_cli}", "list", "--format", "text"],
+            "cwd": "fixture_root",
+        },
+        "fixtures": [{"id": "minimal-repo", "files": {}}],
+        "expectations": {
+            "exit": {"code": 0},
+            "stdout": {
+                "format": "text",
+                "field_assertions": [],
+                "contains": ["Todo items:", "- Write contract-owned test"],
+            },
+            "stderr": {"allow_non_empty": False},
+        },
+    }
+    cli = tmp_path / "todo_cli.py"
+    cli.write_text("print('Todo items:\\n- Different item')\n", encoding="utf-8")
+    case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
+    fixture_root = materialize_case_fixture(case=case, root=tmp_path / "fixtures")
+
+    _result, failures = run_cli_conformance_case(
+        case=case,
+        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        fixture_root=fixture_root,
+    )
+
+    assert len(failures) == 1
+    assert failures[0].conformance_ref == "todo.list-text.process"
+    assert "stdout text drifted from contract" in failures[0].message
+    assert "- Write contract-owned test" in failures[0].message
+
+
 def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family(tmp_path: Path) -> None:
     py_path = tmp_path / "out" / "python" / "cli.py"
     ts_path = tmp_path / "out" / "typescript" / "cli.mjs"
