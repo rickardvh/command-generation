@@ -154,6 +154,16 @@ def _python_resource_copies(package: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in binding.get("resource_copies", []) if isinstance(item, dict)]
 
 
+def _resource_copy_source_files(source_root: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in source_root.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.relative_to(source_root).parts
+        and path.suffix not in {".pyc", ".pyo"}
+    )
+
+
 def _local_runtime_binding_for_import(package: dict[str, Any], import_module: str) -> dict[str, Any] | None:
     for binding in _local_runtime_bindings(package):
         if str(binding.get("source_import_module") or "") == import_module:
@@ -253,7 +263,7 @@ def _python_resource_copy_outputs(
         required_marker = str(copy.get("required_marker") or "")
         if required_marker and not (source_root / required_marker).is_file():
             raise FileNotFoundError(f"missing required resource marker: {(source_root / required_marker).as_posix()}")
-        for source in sorted(path for path in source_root.rglob("*") if path.is_file()):
+        for source in _resource_copy_source_files(source_root):
             relative = source.relative_to(source_root)
             outputs.append(GeneratedOutput(generated_root / relative, source.read_text(encoding="utf-8")))
     return outputs
@@ -341,7 +351,7 @@ def _typescript_resource_copy_outputs(
         required_marker = str(copy.get("required_marker") or "")
         if required_marker and not (source_root / required_marker).is_file():
             raise FileNotFoundError(f"missing required resource marker: {(source_root / required_marker).as_posix()}")
-        for source in sorted(path for path in source_root.rglob("*") if path.is_file()):
+        for source in _resource_copy_source_files(source_root):
             relative = source.relative_to(source_root)
             outputs.append(GeneratedOutput(generated_root / relative, source.read_text(encoding="utf-8")))
 

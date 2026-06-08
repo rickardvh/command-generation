@@ -256,6 +256,27 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
 
 
+def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+    cache_dir = tmp_path / "payload" / "__pycache__"
+    cache_dir.mkdir()
+    (cache_dir / "todos.cpython-313.pyc").write_bytes(b"\xb1\x00invalid bytecode")
+    (tmp_path / "payload" / "stale.pyo").write_bytes(b"\xb1\x00invalid optimized bytecode")
+
+    stale = generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    assert stale == []
+    assert (tmp_path / "todo_cli_pkg" / "_payload" / "todos.json").is_file()
+    assert not (tmp_path / "todo_cli_pkg" / "_payload" / "__pycache__").exists()
+    assert not (tmp_path / "todo_cli_pkg" / "_payload" / "stale.pyo").exists()
+
+
 def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> None:
     contract = {
         "id": "todo.list.process",
