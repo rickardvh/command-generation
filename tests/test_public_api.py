@@ -3,27 +3,34 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
 
 from command_generation import (
     BUILTIN_PORTABLE_PRIMITIVES,
+    canonical_command_artifacts,
     CliConformanceTarget,
     CommandGenerationHostManifest,
+    FunctionConformanceTarget,
     GeneratedOutput,
     PrimitiveContext,
     PrimitiveRegistry,
     command_package_schema_path,
+    conformance_ownership_inventory,
     execute_primitive,
     generate_command_packages,
     generated_output_freshness_report,
     load_command_package_ir,
     materialize_case_fixture,
+    operation_case_from_contract,
     process_case_from_contract,
     render_outputs,
+    run_function_conformance_case,
     run_cli_conformance_case,
 )
+from command_generation import generator
 
 
 def _maturity_policy() -> dict[str, object]:
@@ -277,6 +284,114 @@ def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:
     assert not (tmp_path / "todo_cli_pkg" / "_payload" / "stale.pyo").exists()
 
 
+def test_canonical_command_artifacts_expose_implementation_independent_truth(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+
+    artifacts = canonical_command_artifacts(manifest)
+
+    assert len(artifacts) == 1
+    artifact = artifacts[0]
+    assert artifact.package_id == "todo-fixture"
+    assert artifact.program == "todoctl"
+    assert artifact.adapter_id == "todo.list.cli"
+    assert artifact.command_name == "list"
+    assert artifact.operation_ref == {"id": "todo.list.report", "path": "operations/todo.list.report.json"}
+    assert artifact.runtime_binding["primitive_refs"] == ["filesystem.read", "json.parse", "payload.assemble", "output.emit"]
+    assert artifact.conformance_refs == ("todo.list.process",)
+    assert artifact.projection_boundary["universal"] == ("command identity",)
+    assert artifact.projection_boundary["target_specific"] == ("parser wiring",)
+    assert artifact.projection_boundary["runtime_owned"] == ("portable primitive execution",)
+
+
+def test_canonical_command_artifacts_exclude_target_specific_package_fields(tmp_path: Path) -> None:
+    artifact = canonical_command_artifacts(_fixture_manifest(tmp_path))[0]
+
+    artifact_fields = set(artifact.__dataclass_fields__)
+    assert "generated_root" not in artifact_fields
+    assert "package_name" not in artifact_fields
+    assert "entrypoints" not in artifact_fields
+    assert "test_environment" not in artifact_fields
+    assert "kind" not in artifact_fields
+    rendered = repr(artifact)
+    assert "spawnSync" not in rendered
+    assert "argparse" not in rendered
+    assert "Dockerfile" not in rendered
+
+
+def test_generated_targets_include_operation_fragment_support(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    read_step = operation["ir_plan"]["steps"].pop(0)
+    operation["ir_plan"]["fragments"] = [{"id": "load-todos", "steps": [read_step]}]
+    operation["ir_plan"]["steps"].insert(0, {"id": "load", "uses_fragment": "load-todos"})
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+
+    outputs = render_outputs(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+    )
+    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+
+    assert json.loads(rendered["todo_cli_pkg/operations/todo.list.report.json"])["ir_plan"]["fragments"][0]["id"] == "load-todos"
+    assert "expand_operation_steps" in rendered["todo_cli_pkg/primitives/primitive_executor.py"]
+    assert "def expand_operation_steps" in rendered["todo_cli_pkg/primitives/operation_composition.py"]
+
+
+def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics() -> None:
+    source_module = types.ModuleType("fake_source_runtime_for_facade")
+
+    def first_value() -> str:
+        return "first"
+
+    source_module.runtime_value = first_value
+    sys.modules[source_module.__name__] = source_module
+    try:
+        rendered = generator._python_local_runtime_binding_module(
+            {
+                "program": "demo-cli",
+                "python_runtime_binding": {
+                    "operation_executor": {
+                        "handlers": [
+                            {
+                                "primitive": "demo.value",
+                                "handler": "function_call",
+                                "import_module": source_module.__name__,
+                                "function": "runtime_value",
+                            }
+                        ]
+                    }
+                },
+            },
+            {
+                "source_import_module": source_module.__name__,
+                "module_file": "primitives.demo_runtime",
+            },
+            source_path="demo_ir.json",
+            regenerate_command="generate-demo",
+        )
+        assert "live source-module lookup at call time" in rendered
+        assert "not forwarded back into source modules" in rendered
+        facade_globals: dict[str, object] = {}
+        exec(rendered, facade_globals)
+
+        assert facade_globals["runtime_value"]() == "first"
+
+        def second_value() -> str:
+            return "second"
+
+        source_module.runtime_value = second_value
+        assert facade_globals["runtime_value"]() == "second"
+
+        facade_globals["runtime_value"] = lambda: "facade-only"
+        assert source_module.runtime_value() == "second"
+        assert facade_globals["runtime_value"]() == "facade-only"
+    finally:
+        sys.modules.pop(source_module.__name__, None)
+
+
 def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> None:
     contract = {
         "id": "todo.list.process",
@@ -434,6 +549,91 @@ def test_contract_owned_conformance_case_reports_text_stdout_drift(tmp_path: Pat
     assert failures[0].conformance_ref == "todo.list-text.process"
     assert "stdout text drifted from contract" in failures[0].message
     assert "- Write contract-owned test" in failures[0].message
+
+
+def test_contract_owned_operation_case_runs_function_adapter() -> None:
+    contract = {
+        "id": "todo.list.operation",
+        "operation_id": "todo.list.report",
+        "input": {"format": "json"},
+        "expectations": {
+            "result": {
+                "field_assertions": [
+                    {"path": ["kind"], "equals": "todo-list/v1"},
+                    {"path": ["item_count"], "equals": 2},
+                ]
+            }
+        },
+    }
+    case = operation_case_from_contract(contract=contract)
+
+    result, failures = run_function_conformance_case(
+        case=case,
+        target=FunctionConformanceTarget(
+            label="python-function",
+            invoke=lambda values: {"kind": "todo-list/v1", "item_count": 2, "format": values["format"]},
+        ),
+    )
+
+    assert failures == []
+    assert result is not None
+    assert result.selected_fields == {"kind": "todo-list/v1", "item_count": 2}
+
+
+def test_contract_owned_operation_case_reports_function_output_drift() -> None:
+    contract = {
+        "id": "todo.list.operation",
+        "operation_id": "todo.list.report",
+        "input": {},
+        "expectations": {"result": {"field_assertions": [{"path": ["item_count"], "equals": 2}]}},
+    }
+    case = operation_case_from_contract(contract=contract)
+
+    _result, failures = run_function_conformance_case(
+        case=case,
+        target=FunctionConformanceTarget(label="python-function", invoke=lambda _values: {"item_count": 3}),
+    )
+
+    assert len(failures) == 1
+    assert failures[0].conformance_ref == "todo.list.operation"
+    assert "result shape drifted" in failures[0].message
+
+
+def test_contract_owned_operation_case_checks_expected_function_error() -> None:
+    contract = {
+        "id": "todo.list-error.operation",
+        "operation_id": "todo.list.report",
+        "input": {"format": "yaml"},
+        "expectations": {"result": {"field_assertions": []}, "error": {"contains": ["invalid format"]}},
+    }
+    case = operation_case_from_contract(contract=contract)
+
+    result, failures = run_function_conformance_case(
+        case=case,
+        target=FunctionConformanceTarget(
+            label="python-function",
+            invoke=lambda _values: (_ for _ in ()).throw(ValueError("invalid format: yaml")),
+        ),
+    )
+
+    assert failures == []
+    assert result is not None
+    assert "invalid format" in result.error
+
+
+def test_conformance_ownership_inventory_accounts_for_shared_and_consumer_surfaces() -> None:
+    inventory = conformance_ownership_inventory()
+
+    owned = {entry["id"] for entry in inventory["owns"]}
+    assert {
+        "process-conformance-runner",
+        "function-operation-conformance-runner",
+        "generated-artifact-freshness",
+        "operation-ir-primitives",
+    } <= owned
+    assert "FunctionConformanceTarget" in inventory["extension_points"]
+    assert "consumer proof routing and installed-package lifecycle tests" in inventory["consumer_owned"]
+    assert "consumer-specific behavior remains in the consumer repo" in inventory["completion_rule"]
 
 
 def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family(tmp_path: Path) -> None:
