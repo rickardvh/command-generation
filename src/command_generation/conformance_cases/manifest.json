@@ -1,0 +1,34 @@
+{
+  "schema_version": "command-generation/conformance-cases/v1",
+  "summary": "Package-owned reusable cases for generic command-generation conformance behavior.",
+  "contracts": [
+    {
+      "id": "todo.list.process",
+      "path": "todo.list.process.json",
+      "kind": "process",
+      "owner": "command-generation",
+      "category": "convert"
+    },
+    {
+      "id": "todo.list-text.process",
+      "path": "todo.list-text.process.json",
+      "kind": "process",
+      "owner": "command-generation",
+      "category": "convert"
+    },
+    {
+      "id": "todo.list.operation",
+      "path": "todo.list.operation.json",
+      "kind": "operation",
+      "owner": "command-generation",
+      "category": "convert"
+    },
+    {
+      "id": "todo.list-error.operation",
+      "path": "todo.list-error.operation.json",
+      "kind": "operation",
+      "owner": "command-generation",
+      "category": "convert"
+    }
+  ]
+}

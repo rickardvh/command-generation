@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from importlib import resources
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -287,6 +288,11 @@ def conformance_ownership_inventory() -> dict[str, object]:
                 "surface": "run_operation_steps/PrimitiveRegistry/CommandGenerationHostManifest",
                 "reason": "Portable operation IR execution, composition, primitive support, and host extension points.",
             },
+            {
+                "id": "bundled-conformance-case-resources",
+                "surface": "contract_conformance_cases_manifest/load_contract_conformance_case",
+                "reason": "Reusable package-owned contract cases for generic runner, adapter, and portable behavior examples.",
+            },
         ],
         "extension_points": [
             "CliConformanceTarget",
@@ -304,6 +310,33 @@ def conformance_ownership_inventory() -> dict[str, object]:
         ],
         "completion_rule": "Generic generated-artifact conformance belongs here; consumer-specific behavior remains in the consumer repo with an explicit owner.",
     }
+
+
+def contract_conformance_cases_manifest() -> dict[str, object]:
+    """Load the package-owned conformance case resource manifest."""
+
+    return _load_conformance_resource("manifest.json")
+
+
+def load_contract_conformance_case(ref: str) -> dict[str, object]:
+    """Load one package-owned conformance case by id or resource path."""
+
+    manifest = contract_conformance_cases_manifest()
+    contracts = manifest.get("contracts", [])
+    if not isinstance(contracts, list):
+        raise ValueError("conformance case manifest has malformed contracts")
+    selected_path = ref
+    for item in contracts:
+        if not isinstance(item, Mapping):
+            continue
+        entry = cast(Mapping[str, object], item)
+        if entry.get("id") == ref:
+            path = entry.get("path")
+            if not isinstance(path, str):
+                raise ValueError(f"conformance case manifest entry {ref!r} has no path")
+            selected_path = path
+            break
+    return _load_conformance_resource(selected_path)
 
 
 def materialize_case_fixture(*, case: ProcessConformanceCase, root: Path) -> Path:
@@ -468,6 +501,13 @@ def _field_value(payload: object, path: list[str]) -> object:
             raise KeyError(".".join(path))
         current = cast(Mapping[str, object], current)[part]
     return current
+
+
+def _load_conformance_resource(path: str) -> dict[str, object]:
+    if "/" in path or "\\" in path:
+        raise ValueError(f"conformance resource path must be a file name, got {path!r}")
+    resource = resources.files("command_generation.conformance_cases").joinpath(path)
+    return json.loads(resource.read_text(encoding="utf-8"))
 
 
 def _mapping(value: object) -> Mapping[str, object]:

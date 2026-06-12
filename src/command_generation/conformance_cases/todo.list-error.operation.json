@@ -1,0 +1,15 @@
+{
+  "id": "todo.list-error.operation",
+  "operation_id": "todo.list.report",
+  "input": {
+    "format": "yaml"
+  },
+  "expectations": {
+    "result": {
+      "field_assertions": []
+    },
+    "error": {
+      "contains": ["invalid format"]
+    }
+  }
+}
