@@ -1,0 +1,38 @@
+{
+  "id": "todo.list.process",
+  "operation_id": "todo.list.report",
+  "adapter": {
+    "kind": "process",
+    "command_template": ["{todo_cli}", "list", "--format", "json"],
+    "cwd": "fixture_root"
+  },
+  "fixtures": [
+    {
+      "id": "minimal-repo",
+      "files": {
+        "README.md": "# Fixture\n"
+      }
+    }
+  ],
+  "expectations": {
+    "exit": {
+      "code": 0
+    },
+    "stdout": {
+      "format": "json",
+      "field_assertions": [
+        {
+          "path": ["kind"],
+          "equals": "todo-list/v1"
+        },
+        {
+          "path": ["item_count"],
+          "equals": 2
+        }
+      ]
+    },
+    "stderr": {
+      "allow_non_empty": false
+    }
+  }
+}

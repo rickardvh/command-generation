@@ -4,7 +4,9 @@ import json
 import subprocess
 import sys
 import types
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -18,11 +20,13 @@ from command_generation import (
     PrimitiveContext,
     PrimitiveRegistry,
     command_package_schema_path,
+    contract_conformance_cases_manifest,
     conformance_ownership_inventory,
     execute_primitive,
     generate_command_packages,
     generated_output_freshness_report,
     load_command_package_ir,
+    load_contract_conformance_case,
     materialize_case_fixture,
     operation_case_from_contract,
     process_case_from_contract,
@@ -346,7 +350,7 @@ def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics(
     def first_value() -> str:
         return "first"
 
-    source_module.runtime_value = first_value
+    setattr(source_module, "runtime_value", first_value)
     sys.modules[source_module.__name__] = source_module
     try:
         rendered = generator._python_local_runtime_binding_module(
@@ -377,48 +381,23 @@ def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics(
         facade_globals: dict[str, object] = {}
         exec(rendered, facade_globals)
 
-        assert facade_globals["runtime_value"]() == "first"
+        assert cast(Callable[[], str], facade_globals["runtime_value"])() == "first"
 
         def second_value() -> str:
             return "second"
 
-        source_module.runtime_value = second_value
-        assert facade_globals["runtime_value"]() == "second"
+        setattr(source_module, "runtime_value", second_value)
+        assert cast(Callable[[], str], facade_globals["runtime_value"])() == "second"
 
         facade_globals["runtime_value"] = lambda: "facade-only"
-        assert source_module.runtime_value() == "second"
-        assert facade_globals["runtime_value"]() == "facade-only"
+        assert cast(Callable[[], str], getattr(source_module, "runtime_value"))() == "second"
+        assert cast(Callable[[], str], facade_globals["runtime_value"])() == "facade-only"
     finally:
         sys.modules.pop(source_module.__name__, None)
 
 
 def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> None:
-    contract = {
-        "id": "todo.list.process",
-        "operation_id": "todo.list.report",
-        "adapter": {
-            "kind": "process",
-            "command_template": ["{todo_cli}", "list", "--format", "json"],
-            "cwd": "fixture_root",
-        },
-        "fixtures": [
-            {
-                "id": "minimal-repo",
-                "files": {"README.md": "# Fixture\n"},
-            }
-        ],
-        "expectations": {
-            "exit": {"code": 0},
-            "stdout": {
-                "format": "json",
-                "field_assertions": [
-                    {"path": ["kind"], "equals": "todo-list/v1"},
-                    {"path": ["item_count"], "equals": 2},
-                ],
-            },
-            "stderr": {"allow_non_empty": False},
-        },
-    }
+    contract = load_contract_conformance_case("todo.list.process")
     cli = tmp_path / "todo_cli.py"
     cli.write_text(
         "import json\n"
@@ -444,26 +423,9 @@ def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> N
 
 
 def test_contract_owned_conformance_case_reports_output_drift(tmp_path: Path) -> None:
-    contract = {
-        "id": "todo.list.process",
-        "operation_id": "todo.list.report",
-        "adapter": {
-            "kind": "process",
-            "command_template": ["{todo_cli}", "list", "--format", "json"],
-            "cwd": "fixture_root",
-        },
-        "fixtures": [{"id": "minimal-repo", "files": {}}],
-        "expectations": {
-            "exit": {"code": 0},
-            "stdout": {
-                "format": "json",
-                "field_assertions": [{"path": ["item_count"], "equals": 2}],
-            },
-            "stderr": {"allow_non_empty": False},
-        },
-    }
+    contract = load_contract_conformance_case("todo.list.process")
     cli = tmp_path / "todo_cli.py"
-    cli.write_text("import json\nprint(json.dumps({'item_count': 3}))\n", encoding="utf-8")
+    cli.write_text("import json\nprint(json.dumps({'kind': 'todo-list/v1', 'item_count': 3}))\n", encoding="utf-8")
     case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
     fixture_root = materialize_case_fixture(case=case, root=tmp_path / "fixtures")
 
@@ -479,25 +441,7 @@ def test_contract_owned_conformance_case_reports_output_drift(tmp_path: Path) ->
 
 
 def test_contract_owned_conformance_case_checks_text_stdout(tmp_path: Path) -> None:
-    contract = {
-        "id": "todo.list-text.process",
-        "operation_id": "todo.list.report",
-        "adapter": {
-            "kind": "process",
-            "command_template": ["{todo_cli}", "list", "--format", "text"],
-            "cwd": "fixture_root",
-        },
-        "fixtures": [{"id": "minimal-repo", "files": {}}],
-        "expectations": {
-            "exit": {"code": 0},
-            "stdout": {
-                "format": "text",
-                "field_assertions": [],
-                "contains": ["Todo items:", "- Write contract-owned test"],
-            },
-            "stderr": {"allow_non_empty": False},
-        },
-    }
+    contract = load_contract_conformance_case("todo.list-text.process")
     cli = tmp_path / "todo_cli.py"
     cli.write_text("print('Todo items:\\n- Write contract-owned test')\n", encoding="utf-8")
     case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
@@ -515,25 +459,7 @@ def test_contract_owned_conformance_case_checks_text_stdout(tmp_path: Path) -> N
 
 
 def test_contract_owned_conformance_case_reports_text_stdout_drift(tmp_path: Path) -> None:
-    contract = {
-        "id": "todo.list-text.process",
-        "operation_id": "todo.list.report",
-        "adapter": {
-            "kind": "process",
-            "command_template": ["{todo_cli}", "list", "--format", "text"],
-            "cwd": "fixture_root",
-        },
-        "fixtures": [{"id": "minimal-repo", "files": {}}],
-        "expectations": {
-            "exit": {"code": 0},
-            "stdout": {
-                "format": "text",
-                "field_assertions": [],
-                "contains": ["Todo items:", "- Write contract-owned test"],
-            },
-            "stderr": {"allow_non_empty": False},
-        },
-    }
+    contract = load_contract_conformance_case("todo.list-text.process")
     cli = tmp_path / "todo_cli.py"
     cli.write_text("print('Todo items:\\n- Different item')\n", encoding="utf-8")
     case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
@@ -552,19 +478,7 @@ def test_contract_owned_conformance_case_reports_text_stdout_drift(tmp_path: Pat
 
 
 def test_contract_owned_operation_case_runs_function_adapter() -> None:
-    contract = {
-        "id": "todo.list.operation",
-        "operation_id": "todo.list.report",
-        "input": {"format": "json"},
-        "expectations": {
-            "result": {
-                "field_assertions": [
-                    {"path": ["kind"], "equals": "todo-list/v1"},
-                    {"path": ["item_count"], "equals": 2},
-                ]
-            }
-        },
-    }
+    contract = load_contract_conformance_case("todo.list.operation")
     case = operation_case_from_contract(contract=contract)
 
     result, failures = run_function_conformance_case(
@@ -581,17 +495,15 @@ def test_contract_owned_operation_case_runs_function_adapter() -> None:
 
 
 def test_contract_owned_operation_case_reports_function_output_drift() -> None:
-    contract = {
-        "id": "todo.list.operation",
-        "operation_id": "todo.list.report",
-        "input": {},
-        "expectations": {"result": {"field_assertions": [{"path": ["item_count"], "equals": 2}]}},
-    }
+    contract = load_contract_conformance_case("todo.list.operation")
     case = operation_case_from_contract(contract=contract)
 
     _result, failures = run_function_conformance_case(
         case=case,
-        target=FunctionConformanceTarget(label="python-function", invoke=lambda _values: {"item_count": 3}),
+        target=FunctionConformanceTarget(
+            label="python-function",
+            invoke=lambda _values: {"kind": "todo-list/v1", "item_count": 3},
+        ),
     )
 
     assert len(failures) == 1
@@ -600,12 +512,7 @@ def test_contract_owned_operation_case_reports_function_output_drift() -> None:
 
 
 def test_contract_owned_operation_case_checks_expected_function_error() -> None:
-    contract = {
-        "id": "todo.list-error.operation",
-        "operation_id": "todo.list.report",
-        "input": {"format": "yaml"},
-        "expectations": {"result": {"field_assertions": []}, "error": {"contains": ["invalid format"]}},
-    }
+    contract = load_contract_conformance_case("todo.list-error.operation")
     case = operation_case_from_contract(contract=contract)
 
     result, failures = run_function_conformance_case(
@@ -624,16 +531,28 @@ def test_contract_owned_operation_case_checks_expected_function_error() -> None:
 def test_conformance_ownership_inventory_accounts_for_shared_and_consumer_surfaces() -> None:
     inventory = conformance_ownership_inventory()
 
-    owned = {entry["id"] for entry in inventory["owns"]}
+    owns = cast(list[Mapping[str, object]], inventory["owns"])
+    owned = {entry["id"] for entry in owns}
     assert {
         "process-conformance-runner",
         "function-operation-conformance-runner",
         "generated-artifact-freshness",
         "operation-ir-primitives",
+        "bundled-conformance-case-resources",
     } <= owned
-    assert "FunctionConformanceTarget" in inventory["extension_points"]
-    assert "consumer proof routing and installed-package lifecycle tests" in inventory["consumer_owned"]
-    assert "consumer-specific behavior remains in the consumer repo" in inventory["completion_rule"]
+    assert "FunctionConformanceTarget" in cast(list[str], inventory["extension_points"])
+    assert "consumer proof routing and installed-package lifecycle tests" in cast(list[str], inventory["consumer_owned"])
+    assert "consumer-specific behavior remains in the consumer repo" in str(inventory["completion_rule"])
+
+
+def test_contract_conformance_cases_manifest_loads_package_owned_cases() -> None:
+    manifest = contract_conformance_cases_manifest()
+    contracts = cast(list[Mapping[str, object]], manifest["contracts"])
+    cases = {entry["id"]: entry for entry in contracts}
+
+    assert manifest["schema_version"] == "command-generation/conformance-cases/v1"
+    assert cases["todo.list.process"]["category"] == "convert"
+    assert load_contract_conformance_case("todo.list.operation")["operation_id"] == "todo.list.report"
 
 
 def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family(tmp_path: Path) -> None:

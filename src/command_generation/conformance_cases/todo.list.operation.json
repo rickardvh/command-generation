@@ -1,0 +1,21 @@
+{
+  "id": "todo.list.operation",
+  "operation_id": "todo.list.report",
+  "input": {
+    "format": "json"
+  },
+  "expectations": {
+    "result": {
+      "field_assertions": [
+        {
+          "path": ["kind"],
+          "equals": "todo-list/v1"
+        },
+        {
+          "path": ["item_count"],
+          "equals": 2
+        }
+      ]
+    }
+  }
+}

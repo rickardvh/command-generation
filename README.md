@@ -12,6 +12,7 @@ Public API:
 - `PrimitiveRegistry` and `PrimitiveDefinition` describe portable or host-owned primitives with target support.
 - `process_case_from_contract(...)`, `CliConformanceTarget`, and `run_cli_conformance_case(...)` provide the generic black-box runner for contract-owned CLI/process conformance cases.
 - `operation_case_from_contract(...)`, `FunctionConformanceTarget`, and `run_function_conformance_case(...)` provide the generic JSON-shaped operation conformance runner for direct implementation adapters.
+- `contract_conformance_cases_manifest()` and `load_contract_conformance_case(...)` expose package-owned reusable conformance cases.
 - `conformance_ownership_inventory()` reports the shared conformance surfaces owned here and the consumer-owned surfaces that should stay out of this package.
 
 Hosts keep product-specific contracts, primitive implementations, and generated output ownership in their own repositories. The package owns generic rendering, schema loading, primitive registry validation, and portable primitive execution helpers.
@@ -30,3 +31,5 @@ Ownership split:
 - This package owns generic conformance machinery, generated-artifact adapter expectations, and reusable behavior cases that apply across consumers.
 - Consumers own product-specific operation contracts, runtime primitive implementations, wrapper semantics, integration seams, and proof routing.
 - Migration should preserve black-box behavior with smaller reusable cases; it should not copy old regression-test clusters one-for-one.
+
+See `docs/contract-test-replacement-inventory.md` for the current keep/convert/merge/delete inventory.

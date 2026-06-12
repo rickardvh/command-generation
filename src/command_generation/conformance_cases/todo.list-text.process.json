@@ -1,0 +1,28 @@
+{
+  "id": "todo.list-text.process",
+  "operation_id": "todo.list.report",
+  "adapter": {
+    "kind": "process",
+    "command_template": ["{todo_cli}", "list", "--format", "text"],
+    "cwd": "fixture_root"
+  },
+  "fixtures": [
+    {
+      "id": "minimal-repo",
+      "files": {}
+    }
+  ],
+  "expectations": {
+    "exit": {
+      "code": 0
+    },
+    "stdout": {
+      "format": "text",
+      "field_assertions": [],
+      "contains": ["Todo items:", "- Write contract-owned test"]
+    },
+    "stderr": {
+      "allow_non_empty": false
+    }
+  }
+}
