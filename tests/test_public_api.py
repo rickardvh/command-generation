@@ -119,6 +119,7 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
                                 "kind": "todo-list/v1",
                                 "item_count": {"$count": "todos"},
                                 "items": {"$value": "todos"},
+                                "requested_format": {"$value": "output_format"},
                             }
                         }
                     },
@@ -209,7 +210,10 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
                     "operation_executor": {
                         "module_file": "primitives.operation_executor",
                         "supported_operation_ids": ["todo.list.report"],
-                        "initial_values": [{"name": "format", "arg": "format", "default": "json"}],
+                        "initial_values": [
+                            {"name": "format", "arg": "format", "default": "json"},
+                            {"name": "output_format", "arg": "format", "default": "json"},
+                        ],
                         "context_roots": [
                             {"name": "todo.package-payload", "generated_root": "_payload", "required_marker": "todos.json"}
                         ],
@@ -263,8 +267,40 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)["item_count"] == 2
+    payload = json.loads(result.stdout)
+    assert payload["item_count"] == 2
+    assert payload["requested_format"] == "json"
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
+
+
+def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+
+    stale = generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    assert stale == []
+    sys.path.insert(0, str(tmp_path))
+    try:
+        from todo_cli_pkg.commands.todo_list_report import invoke
+
+        result = invoke({"format": "json", "output_format": "text"})
+    finally:
+        sys.path.remove(str(tmp_path))
+        for module_name in list(sys.modules):
+            if module_name == "todo_cli_pkg" or module_name.startswith("todo_cli_pkg."):
+                sys.modules.pop(module_name, None)
+    assert result == {
+        "kind": "todo-list/v1",
+        "item_count": 2,
+        "items": [{"title": "Write test"}, {"title": "Run test"}],
+        "requested_format": "text",
+    }
 
 
 def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:

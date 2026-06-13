@@ -487,10 +487,22 @@ def _python_command_module(
         else:
             run_body = f"    from {import_module} import {imported_function}\n\n    return {imported_function}(args)\n"
         support_imports = ""
+        invoke_function = (
+            "\n\n"
+            "def invoke(_values: Mapping[str, Any]) -> object:\n"
+            f"    raise RuntimeError({operation_id!r} + ' has no generated operation callable')\n"
+        )
+        typing_import = "from typing import Any\nfrom collections.abc import Mapping\n\n"
     else:
         run_body = f"    return run_operation_ir(generated_operation_contract({operation_id!r}), args)\n"
+        invoke_function = (
+            "\n\n"
+            "def invoke(values: Mapping[str, Any]) -> object:\n"
+            f"    return run_operation_callable(generated_operation_contract({operation_id!r}), values)\n"
+        )
         executor_module = str(operation_executor.get("module_file", "operation_executor"))
-        support_imports = f"from ..cli import generated_operation_contract\nfrom ..{executor_module} import run_operation_ir\n"
+        support_imports = f"from ..cli import generated_operation_contract\nfrom ..{executor_module} import run_operation_callable, run_operation_ir\n"
+        typing_import = "from collections.abc import Mapping\nfrom typing import Any\n\n"
     return (
         '"""Generated executable command projection.\n\n'
         f"Source: {source_path}\n"
@@ -500,11 +512,12 @@ def _python_command_module(
         '"""\n\n'
         "from __future__ import annotations\n\n"
         "import argparse\n\n"
+        f"{typing_import}"
         "# DO NOT EDIT DIRECTLY.\n"
         f"# Command behavior changes belong in {source_path} and the referenced operation contract.\n"
         f"# Regenerate with: {regenerate_command}\n\n"
         f"{support_imports}\n\n"
-        "def run(args: argparse.Namespace) -> int:\n" + run_body
+        "def run(args: argparse.Namespace) -> int:\n" + run_body + invoke_function
     )
 
 
@@ -1246,8 +1259,12 @@ def _python_operation_executor_module(
     runtime_module_file = _runtime_module_file_for_package(package)
     supported_operation_ids = sorted(str(operation_id) for operation_id in binding["supported_operation_ids"])
     initial_values = []
+    callable_initial_values = []
     for item in binding["initial_values"]:
         initial_values.append(f"                {str(item['name'])!r}: getattr(args, {str(item['arg'])!r}, {item.get('default')!r}),")
+        callable_initial_values.append(
+            f"                {str(item['name'])!r}: values.get({str(item['name'])!r}, {item.get('default')!r}),"
+        )
     handlers: list[str] = []
     handler_items = []
     needs_json = False
@@ -1288,7 +1305,10 @@ def _python_operation_executor_module(
         '"""\n\n'
         "from __future__ import annotations\n\n"
         "import argparse\n"
+        "import contextlib\n"
+        "import io\n"
         f"{json_import}"
+        "from collections.abc import Mapping\n"
         "from pathlib import Path\n"
         "from typing import Any\n\n"
         "from .primitive_executor import (\n"
@@ -1303,6 +1323,26 @@ def _python_operation_executor_module(
         "class OperationIrExecutionError(RuntimeError):\n"
         "    pass\n\n\n"
         "def run_operation_ir(operation: dict[str, Any], args: argparse.Namespace) -> int:\n"
+        "    values = run_operation_values(\n"
+        "        operation,\n"
+        "        initial_values={\n"
+        '            "operation_id": operation.get("id"),\n' + "\n".join(initial_values) + "\n"
+        "        },\n"
+        "    )\n"
+        "    emitted = values.get('emitted')\n"
+        "    if isinstance(emitted, str):\n"
+        "        print(emitted, end='')\n"
+        "    return 0\n\n\n"
+        "def run_operation_callable(operation: dict[str, Any], values: Mapping[str, Any]) -> object:\n"
+        "    with contextlib.redirect_stdout(io.StringIO()):\n"
+        "        result = run_operation_values(\n"
+        "            operation,\n"
+        "            initial_values={\n"
+        '                "operation_id": operation.get("id"),\n' + "\n".join(callable_initial_values) + "\n"
+        "            },\n"
+        "        ).get('result')\n"
+        "    return result\n\n\n"
+        "def run_operation_values(operation: dict[str, Any], *, initial_values: Mapping[str, Any]) -> dict[str, Any]:\n"
         '    if operation.get("id") not in {\n'
         f"        {supported_set}\n"
         "    }:\n"
@@ -1310,21 +1350,16 @@ def _python_operation_executor_module(
         '    if operation.get("migration_status") != "runtime-consumed":\n'
         "        raise OperationIrExecutionError(f\"operation is not marked runtime-consumed: {operation.get('id')!r}\")\n\n"
         "    try:\n"
-        "        values = run_operation_steps(\n"
+        "        return run_operation_steps(\n"
         "            operation,\n"
-        "            initial_values={\n"
-        '                "operation_id": operation.get("id"),\n' + "\n".join(initial_values) + "\n"
-        "            },\n"
+        "            initial_values=dict(initial_values),\n"
         f"            context=PrimitiveContext(cwd=Path.cwd(), roots={{{roots_block}}}),\n"
         "            handlers={\n" + "\n".join(handler_items) + "\n"
         "            },\n"
         "        )\n"
-        "        emitted = values.get('emitted')\n"
-        "        if isinstance(emitted, str):\n"
-        "            print(emitted, end='')\n"
         "    except PrimitiveExecutionError as exc:\n"
         "        raise OperationIrExecutionError(str(exc)) from exc\n"
-        "    return 0\n\n\n" + "\n\n".join(root_functions + handlers)
+        "\n\n" + "\n\n".join(root_functions + handlers)
     )
 
 
