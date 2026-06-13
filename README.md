@@ -34,7 +34,7 @@ Generated runtimes should be self-contained with respect to this package. If a g
 - `PrimitiveRegistry` and `PrimitiveDefinition` describe portable or host-owned primitives with target support.
 - `TargetExtensionContract`, `validate_target_extension_contract(...)`, and `target_support_matrix_entries(...)` define how new generated targets declare projection rules, runtime dependencies, callable/wrapper shape, packaging, conformance execution, and matrix support without owning product semantics.
 - `process_case_from_contract(...)`, `CliConformanceTarget`, and `run_cli_conformance_case(...)` provide the generic black-box runner for contract-owned CLI/process conformance cases.
-- `operation_case_from_contract(...)`, `FunctionConformanceTarget`, and `run_function_conformance_case(...)` provide the generic JSON-shaped operation conformance runner for direct implementation adapters.
+- `operation_case_from_contract(...)`, `FunctionConformanceTarget`, `TypescriptFunctionConformanceTarget`, `run_function_conformance_case(...)`, and `run_typescript_function_conformance_case(...)` provide the generic JSON-shaped operation conformance runner for direct implementation adapters without CLI argv semantics.
 - `contract_conformance_cases_manifest()` and `load_contract_conformance_case(...)` expose package-owned reusable conformance cases.
 - `conformance_ownership_inventory()` reports the shared conformance surfaces owned here and the consumer-owned surfaces that should stay out of this package.
 
