@@ -33,8 +33,12 @@ from command_generation import (
     render_outputs,
     run_function_conformance_case,
     run_cli_conformance_case,
+    target_extension_schema_path,
+    target_support_matrix_entries,
+    validate_target_extension_contract,
 )
 from command_generation import generator
+from command_generation.target_extension import TargetExtensionContract, TargetExtensionContractError
 
 
 def _maturity_policy() -> dict[str, object]:
@@ -240,6 +244,13 @@ def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
     loaded = load_command_package_ir(manifest_path, command_package_schema_path())
 
     assert loaded["packages"][0]["id"] == "todo-fixture"
+
+
+def test_target_extension_schema_copies_match() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    source_schema = repo_root / "schemas" / "target_extension.schema.json"
+
+    assert source_schema.read_bytes() == target_extension_schema_path().read_bytes()
 
 
 def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
@@ -780,3 +791,101 @@ def test_primitive_registry_round_trips_host_metadata() -> None:
 def test_builtin_registry_declares_portable_primitives() -> None:
     assert "filesystem.read" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "output.emit" in BUILTIN_PORTABLE_PRIMITIVES.ids()
+
+
+def _target_extension_contract(**overrides: object) -> dict[str, object]:
+    contract: dict[str, object] = {
+        "schema_version": "command-generation/target-extension/v1",
+        "target_id": "python",
+        "implementation_status": "implemented",
+        "projection_rules": {
+            "source": "operation-ir",
+            "target_owns": ["syntax projection", "runtime imports"],
+        },
+        "runtime_dependencies": {
+            "boundary": ["standard library json", "generated package resources"],
+        },
+        "operation_callable_surface": {
+            "adapter_id": "python.function",
+            "input_model": "operation-values",
+        },
+        "wrapper_adapter_shape": {
+            "owns": ["argv parsing", "exit-code mapping"],
+        },
+        "packaging_output_layout": {
+            "owns": ["module path", "resource layout"],
+        },
+        "conformance_execution": {
+            "runner": "function",
+            "case_model": "input-output-error",
+        },
+        "support_declaration": {
+            "matrix_inclusion": "automatic-when-target-implemented",
+            "adapter_ids": ["python.function"],
+        },
+        "product_semantics_boundary": {
+            "target_owns_product_semantics": False,
+            "rule": "Product behavior remains in operation IR, primitive refs, and host-owned runtime primitives.",
+        },
+        "maintenance_boundary": {
+            "per_operation_feature_maintenance": False,
+            "allowed": ["runtime dependency updates", "target compatibility fixes", "projection bugs"],
+        },
+    }
+    contract.update(overrides)
+    return contract
+
+
+def test_target_extension_contract_validates_and_projects_matrix_entries() -> None:
+    contract = TargetExtensionContract.from_mapping(_target_extension_contract())
+
+    assert target_extension_schema_path().name == "target_extension.schema.json"
+    assert contract.target_id == "python"
+    assert target_support_matrix_entries(
+        [contract],
+        operation_id="todo.list.report",
+        case_id="todo.list.operation",
+    ) == (
+        {
+            "operation_id": "todo.list.report",
+            "case_id": "todo.list.operation",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "source": "target-extension support declaration",
+        },
+    )
+
+
+def test_target_extension_support_matrix_waits_for_implemented_target() -> None:
+    assert (
+        target_support_matrix_entries(
+            [_target_extension_contract(implementation_status="planned")],
+            operation_id="todo.list.report",
+            case_id="todo.list.operation",
+        )
+        == ()
+    )
+
+
+def test_target_extension_contract_rejects_product_semantics_ownership() -> None:
+    contract = _target_extension_contract(
+        product_semantics_boundary={
+            "target_owns_product_semantics": True,
+            "rule": "bad target owns behavior",
+        }
+    )
+
+    with pytest.raises(TargetExtensionContractError, match="target_owns_product_semantics"):
+        validate_target_extension_contract(contract)
+
+
+def test_target_extension_contract_rejects_per_operation_feature_maintenance() -> None:
+    contract = _target_extension_contract(
+        maintenance_boundary={
+            "per_operation_feature_maintenance": True,
+            "allowed": ["add feature logic in each target"],
+        }
+    )
+
+    with pytest.raises(TargetExtensionContractError, match="per_operation_feature_maintenance"):
+        validate_target_extension_contract(contract)

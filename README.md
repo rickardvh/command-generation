@@ -32,6 +32,7 @@ Generated runtimes should be self-contained with respect to this package. If a g
 - `generate_command_packages(..., check=True|False)` checks or writes generated files.
 - `CommandGenerationHostManifest` declares host roots, custom primitive registry entries, target bindings, and optional host-owned runtime support.
 - `PrimitiveRegistry` and `PrimitiveDefinition` describe portable or host-owned primitives with target support.
+- `TargetExtensionContract`, `validate_target_extension_contract(...)`, and `target_support_matrix_entries(...)` define how new generated targets declare projection rules, runtime dependencies, callable/wrapper shape, packaging, conformance execution, and matrix support without owning product semantics.
 - `process_case_from_contract(...)`, `CliConformanceTarget`, and `run_cli_conformance_case(...)` provide the generic black-box runner for contract-owned CLI/process conformance cases.
 - `operation_case_from_contract(...)`, `FunctionConformanceTarget`, and `run_function_conformance_case(...)` provide the generic JSON-shaped operation conformance runner for direct implementation adapters.
 - `contract_conformance_cases_manifest()` and `load_contract_conformance_case(...)` expose package-owned reusable conformance cases.
@@ -52,6 +53,12 @@ That split matters for conformance:
 - use function conformance for JSON-shaped operation semantics;
 - use process conformance for parser behavior, stdout/stderr, exit codes, and wrapper state;
 - do not let a CLI flag name become the semantic contract unless the operation input is intentionally named the same way.
+
+## Target Extension Contract
+
+Target implementations are declared with `command-generation/target-extension/v1`. The contract records target identity, projection rules, runtime dependency boundaries, direct operation callable shape, wrapper/adapter responsibilities, packaging layout, conformance execution, and support-declaration rules for matrix inclusion.
+
+Targets must not own product operation semantics or require per-operation feature maintenance. Ordinary behavior remains in host-owned operation IR, primitive refs, schemas, and input/output/error cases. Target maintenance is limited to runtime dependency updates, target compatibility work, and projection/runtime-adapter bugs.
 
 ## Conformance Strategy
 
