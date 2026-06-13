@@ -2,7 +2,29 @@
 
 `command-generation` renders command-package artifacts from a host-owned command package IR. It is a maintainer dependency: generated runtimes may contain the rendered outputs, but they do not import this package at runtime.
 
-Public API:
+The package exists to keep command surface generation, reusable conformance runners, and portable primitive machinery in one generic library while leaving product semantics in the host repository. Agentic Workspace is one consumer, not the runtime dependency boundary.
+
+## What It Owns
+
+`command-generation` owns:
+
+- the command package IR schema and schema loader;
+- deterministic renderers for generated Python and TypeScript command-package artifacts;
+- generated-artifact freshness accounting;
+- generic portable primitive execution helpers;
+- reusable CLI/process and function/operation conformance runners;
+- package-owned fixture cases that exercise generic adapter behavior.
+
+Host repositories own:
+
+- product-specific operation contracts and generated output ownership;
+- host runtime primitive implementations and integration seams;
+- wrapper policy, installed-payload policy, and proof routing;
+- release pinning and compatibility policy for their generated artifacts.
+
+Generated runtimes should be self-contained with respect to this package. If a generated CLI/function package imports `command_generation` at runtime, that is a boundary violation.
+
+## Public API
 
 - `load_command_package_ir(path, schema_path=None)` validates IR against the package-owned schema.
 - `command_package_schema_path()` returns the packaged JSON schema.
@@ -15,9 +37,23 @@ Public API:
 - `contract_conformance_cases_manifest()` and `load_contract_conformance_case(...)` expose package-owned reusable conformance cases.
 - `conformance_ownership_inventory()` reports the shared conformance surfaces owned here and the consumer-owned surfaces that should stay out of this package.
 
-Hosts keep product-specific contracts, primitive implementations, and generated output ownership in their own repositories. The package owns generic rendering, schema loading, primitive registry validation, and portable primitive execution helpers.
+## Command Package IR
 
-Conformance strategy:
+Host repositories provide command package manifests that describe commands, operation refs, target projections, runtime bindings, resource copies, maturity policy, and generated output locations. This package validates and renders those manifests, but the manifest remains host-owned.
+
+The IR should express stable command and operation intent. Target renderers may project that intent into Python modules, TypeScript modules, CLI adapters, or future adapter surfaces. Generated files are outputs, not the source of truth.
+
+## Operation Callables And Wrappers
+
+Direct function adapters should be operation-shaped semantic artifacts. Their input values are operation value names, not CLI argument names. CLI/process adapters remain wrapper surfaces and may map flags or parser arguments onto operation values.
+
+That split matters for conformance:
+
+- use function conformance for JSON-shaped operation semantics;
+- use process conformance for parser behavior, stdout/stderr, exit codes, and wrapper state;
+- do not let a CLI flag name become the semantic contract unless the operation input is intentionally named the same way.
+
+## Conformance Strategy
 
 - Store behavior examples in host-owned contract resources as stable input/expected-output cases.
 - Keep target differences in thin adapters such as generated Python functions, generated TypeScript functions, CLI wrappers, or a future MCP adapter.
@@ -26,10 +62,27 @@ Conformance strategy:
 - Run the same contract case through the relevant adapter, then compare only the normalized fields that express the behavioral contract.
 - Add new one-off tests only for runner internals or target adapter mechanics; command behavior should be represented by contract cases first.
 
-Ownership split:
-
-- This package owns generic conformance machinery, generated-artifact adapter expectations, and reusable behavior cases that apply across consumers.
-- Consumers own product-specific operation contracts, runtime primitive implementations, wrapper semantics, integration seams, and proof routing.
-- Migration should preserve black-box behavior with smaller reusable cases; it should not copy old regression-test clusters one-for-one.
-
 See `docs/contract-test-replacement-inventory.md` for the current keep/convert/merge/delete inventory.
+
+## Development
+
+Install dependencies with `uv` and run the focused tests for the surface you changed:
+
+```powershell
+uv run pytest
+uv run ruff check src tests
+```
+
+Useful focused commands:
+
+```powershell
+uv run pytest tests/test_public_api.py -q
+uv run pytest tests/test_primitive_executor.py -q
+uv run python tests/primitive_conformance.py
+```
+
+## Release Direction
+
+This package should become a semver-tagged maintainer dependency with CI-built wheel/sdist artifacts. Downstream repositories should be able to consume immutable package versions instead of Git source refs. Until that release path is in place, source installs may remain a development fallback, but generated runtimes still must not import this package at runtime.
+
+See `docs/release-and-versioning.md` for the intended package and compatibility model.

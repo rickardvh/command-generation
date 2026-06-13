@@ -1,0 +1,26 @@
+schema_version = 1
+kind = "agentic-workspace/system-intent/v1"
+summary = "Generate command-package artifacts from host-owned command package IR, portable operation contracts, and target adapter definitions while keeping generated runtimes free of a runtime dependency on this package."
+governing_intents = ["Own generic rendering, schema loading, primitive registry validation, generated-artifact adapter expectations, reusable conformance runners, package-owned fixture cases, and portable primitive execution helpers.", "Keep product-specific contracts, primitive implementations, generated output ownership, wrapper semantics, integration boundaries, installed-payload policy, and proof routing in consuming host repositories.", "Treat direct function callables as operation-shaped semantic adapters and CLI/process wrappers as transport adapters.", "Prefer reusable contract conformance cases and adapter-focused runners over one-off behavior tests for command semantics.", "Release command-generation as a versioned maintainer dependency so consumers can pin generator compatibility by package version rather than Git source shape."]
+anti_intents = ["Do not make generated runtimes import this package at runtime.", "Do not copy consumer-specific operation contracts, primitive implementations, installed payload policy, or generated output ownership into this package.", "Do not preserve old regression clusters one-for-one when a smaller reusable contract case can preserve the same black-box behavior.", "Do not let CLI argument names define semantic operation input names for direct callable adapters."]
+decision_tests = ["Does the change keep command-generation as a maintainer dependency rather than a generated-runtime dependency?", "Is command behavior represented by stable contract cases unless the change is testing runner internals, primitive internals, or target adapter mechanics?", "Does the change preserve the split between package-owned generic machinery and consumer-owned product semantics?", "Does direct callable behavior use operation-shaped inputs rather than leaking wrapper or CLI argument shape?", "Can downstream consumers understand compatibility from package version, schema, and generated artifact metadata?"]
+open_questions = []
+interpretation_notes = "Reviewed after Agentic Workspace jumpstart against README.md, docs, tests, and current cross-repo AW usage."
+confidence = "high"
+needs_review = false
+preferred_source = "README.md"
+last_synced_at = "2026-06-13"
+
+[[source_records]]
+path = "README.md"
+present = true
+sha256 = "421b4518462178902746a0d942c037dbf995455b5b3b896c39e078853e0ca97c"
+first_heading = "command-generation"
+line_count = 60
+
+[[source_records]]
+path = "AGENTS.md"
+present = true
+sha256 = "c581b6a4808886559b01bc7502e502d8434e440e4409e41ddc776719e48cd64c"
+first_heading = "Agent Instructions"
+line_count = 19

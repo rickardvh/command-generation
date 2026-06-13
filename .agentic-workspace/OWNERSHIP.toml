@@ -5,8 +5,6 @@ workflow_path = ".agentic-workspace/WORKFLOW.md"
 ownership_manifest_path = ".agentic-workspace/OWNERSHIP.toml"
 managed_root = ".agentic-workspace/"
 
-subsystems = []
-
 [ownership_classes.repo_owned]
 summary = "Repository-native state owned by the repo and not upgrade-replaceable by installed packages."
 
@@ -77,6 +75,45 @@ start = "<!-- agentic-workspace:workflow:start -->"
 end = "<!-- agentic-workspace:workflow:end -->"
 ownership = "managed_fence"
 uninstall_policy = "remove-fence-only"
+
+[[subsystems]]
+id = "schema-and-ir"
+owner = "repo"
+ownership = "repo_owned"
+paths = ["src/command_generation/ir.py", "src/command_generation/schemas/command_package_ir.schema.json"]
+summary = "Command package IR schema and validation boundary."
+
+[[subsystems]]
+id = "renderers-and-generated-artifacts"
+owner = "repo"
+ownership = "repo_owned"
+paths = ["src/command_generation/generator.py", "src/command_generation/artifacts.py"]
+summary = "Target renderers and generated artifact accounting."
+
+[[subsystems]]
+id = "portable-primitives"
+owner = "repo"
+ownership = "repo_owned"
+paths = [
+  "src/command_generation/primitive_executor.py",
+  "src/command_generation/operation_composition.py",
+  "src/command_generation/primitive_registry.py",
+]
+summary = "Portable primitive execution and composition support."
+
+[[subsystems]]
+id = "contract-conformance"
+owner = "repo"
+ownership = "repo_owned"
+paths = ["src/command_generation/conformance.py", "src/command_generation/conformance_cases", "docs/contract-test-replacement-inventory.md"]
+summary = "Reusable contract conformance runners and package-owned fixture cases."
+
+[[subsystems]]
+id = "packaging-and-release"
+owner = "repo"
+ownership = "repo_owned"
+paths = ["pyproject.toml", "uv.lock", ".github/workflows"]
+summary = "Package build, dependency, and release-version compatibility surfaces."
 
 [[authority_surfaces]]
 concern = "startup-instructions"

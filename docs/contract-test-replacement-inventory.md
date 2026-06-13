@@ -29,3 +29,7 @@ No additional ordinary tests were deleted in this slice. The bulk reduction was 
 ## Boundary
 
 Package-owned cases belong here when they describe generic process, function, adapter, primitive, or generator behavior reusable by consumers. Product-specific operation contracts, proof routing, lifecycle behavior, installed-package checks, wrapper transport policy, and host runtime primitives remain in the consumer repository.
+
+Direct function cases should use operation-shaped input values. CLI/process cases may use adapter argument names, argv templates, stdout, stderr, and exit codes because they prove wrapper behavior. If an operation value name and a CLI argument name differ, the direct function case should prove the operation value name while the process case proves the adapter mapping.
+
+Release and package-version compatibility are tracked separately in `docs/release-and-versioning.md`; this inventory is about behavior-test ownership, not downstream dependency pinning.

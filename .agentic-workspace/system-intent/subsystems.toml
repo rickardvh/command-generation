@@ -1,0 +1,48 @@
+schema_version = 1
+kind = "agentic-workspace/subsystem-intent-set/v1"
+rule = "Subsystem intent is durable scoped decision pressure, not active task state by default."
+
+[[subsystems]]
+id = "schema-and-ir"
+name = "Command package IR and schema loading"
+owner_surfaces = ["src/command_generation/ir.py", "src/command_generation/schemas/command_package_ir.schema.json"]
+intent = "Define and validate the generic command package IR consumed by renderers without importing consumer-specific product semantics."
+must_preserve = ["IR is host-owned input.", "Schema evolution is explicit and test-backed.", "Consumers can validate manifests without generated runtimes depending on command-generation."]
+must_not_do = ["Encode AW-specific runtime policy as generic schema truth.", "Treat generated output files as the canonical source."]
+proof_hints = ["uv run pytest tests/test_public_api.py -q"]
+
+[[subsystems]]
+id = "renderers-and-generated-artifacts"
+name = "Target renderers and generated artifacts"
+owner_surfaces = ["src/command_generation/generator.py", "src/command_generation/artifacts.py"]
+intent = "Render deterministic Python and TypeScript command-package artifacts from IR while keeping generated runtimes self-contained."
+must_preserve = ["Generated runtimes do not import command-generation at runtime.", "Direct Python callables are operation-shaped adapters.", "CLI/process wrappers remain adapter/transport surfaces."]
+must_not_do = ["Leak CLI argument naming into semantic callable input contracts.", "Move consumer-owned primitive implementations into generated generic code."]
+proof_hints = ["uv run pytest tests/test_public_api.py -q", "uv run ruff check src tests"]
+
+[[subsystems]]
+id = "portable-primitives"
+name = "Portable primitive execution"
+owner_surfaces = ["src/command_generation/primitive_executor.py", "src/command_generation/operation_composition.py", "src/command_generation/primitive_registry.py"]
+intent = "Provide generic primitive execution and composition helpers that are reusable across consumer repos."
+must_preserve = ["Primitive unit behavior is tested at primitive level.", "Composite operation tests assume primitive contracts and assert higher-order dataflow.", "Host-specific primitives stay registered as host extensions."]
+must_not_do = ["Duplicate consumer runtime logic in portable primitives.", "Use higher-level composite tests to retest every primitive detail."]
+proof_hints = ["uv run pytest tests/test_primitive_executor.py -q", "uv run python tests/primitive_conformance.py"]
+
+[[subsystems]]
+id = "contract-conformance"
+name = "Contract conformance cases and runners"
+owner_surfaces = ["src/command_generation/conformance.py", "src/command_generation/conformance_cases", "docs/contract-test-replacement-inventory.md"]
+intent = "Own reusable conformance runners and generic fixture cases that let consumers prove behavior through compact contracts instead of copied regression clusters."
+must_preserve = ["Process cases prove wrapper behavior.", "Function cases prove operation-shaped semantic adapters.", "Expected fields stay normalized and minimal."]
+must_not_do = ["Copy consumer-specific behavior matrices into package-owned cases.", "Assert adapter transport behavior in operation-function cases."]
+proof_hints = ["uv run pytest tests/test_public_api.py -q"]
+
+[[subsystems]]
+id = "packaging-and-release"
+name = "Package build and semver release"
+owner_surfaces = ["pyproject.toml", "uv.lock", ".github/workflows"]
+intent = "Make command-generation consumable as a versioned maintainer dependency with CI-built artifacts and compatibility-signaling releases."
+must_preserve = ["Consumers can depend on immutable package artifacts.", "Release metadata distinguishes generator/IR/runtime-shape changes.", "AW local-source dogfooding remains an AW concern, not a command-generation runtime dependency."]
+must_not_do = ["Rely on GitHub source installs as the ordinary downstream consumption model once packages are available.", "Require generated runtimes to import command-generation."]
+proof_hints = ["uv build", "uv run pytest"]
