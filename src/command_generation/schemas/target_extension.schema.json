@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://command-generation.local/schemas/target_extension.schema.json",
+  "title": "Command-generation target extension contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target_id",
+    "implementation_status",
+    "projection_rules",
+    "runtime_dependencies",
+    "operation_callable_surface",
+    "wrapper_adapter_shape",
+    "packaging_output_layout",
+    "conformance_execution",
+    "support_declaration",
+    "product_semantics_boundary",
+    "maintenance_boundary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "command-generation/target-extension/v1"
+    },
+    "target_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_.-]*$"
+    },
+    "implementation_status": {
+      "enum": ["planned", "implemented"]
+    },
+    "projection_rules": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source", "target_owns"],
+      "properties": {
+        "source": {
+          "const": "operation-ir"
+        },
+        "target_owns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "runtime_dependencies": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["boundary"],
+      "properties": {
+        "boundary": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "operation_callable_surface": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["adapter_id", "input_model"],
+      "properties": {
+        "adapter_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_model": {
+          "const": "operation-values"
+        }
+      }
+    },
+    "wrapper_adapter_shape": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["owns"],
+      "properties": {
+        "owns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "packaging_output_layout": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["owns"],
+      "properties": {
+        "owns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "conformance_execution": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["runner", "case_model"],
+      "properties": {
+        "runner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_model": {
+          "const": "input-output-error"
+        }
+      }
+    },
+    "support_declaration": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["matrix_inclusion", "adapter_ids"],
+      "properties": {
+        "matrix_inclusion": {
+          "enum": ["automatic-when-target-implemented", "manual"]
+        },
+        "adapter_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "product_semantics_boundary": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["target_owns_product_semantics", "rule"],
+      "properties": {
+        "target_owns_product_semantics": {
+          "const": false
+        },
+        "rule": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "maintenance_boundary": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["per_operation_feature_maintenance", "allowed"],
+      "properties": {
+        "per_operation_feature_maintenance": {
+          "const": false
+        },
+        "allowed": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

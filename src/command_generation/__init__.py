@@ -29,6 +29,13 @@ from command_generation.host_manifest import CommandGenerationHostManifest
 from command_generation.ir import command_package_schema_path, load_command_package_ir
 from command_generation.primitive_registry import BUILTIN_PORTABLE_PRIMITIVES, PrimitiveDefinition, PrimitiveRegistry
 from command_generation.primitive_executor import PrimitiveContext, PrimitiveExecutionError, execute_primitive, run_operation_steps
+from command_generation.target_extension import (
+    TargetExtensionContract,
+    TargetExtensionContractError,
+    target_extension_schema_path,
+    target_support_matrix_entries,
+    validate_target_extension_contract,
+)
 
 __all__ = [
     "BUILTIN_PORTABLE_PRIMITIVES",
@@ -47,6 +54,8 @@ __all__ = [
     "PrimitiveExecutionError",
     "ProcessConformanceCase",
     "PrimitiveRegistry",
+    "TargetExtensionContract",
+    "TargetExtensionContractError",
     "canonical_command_artifacts",
     "command_package_schema_path",
     "contract_conformance_cases_manifest",
@@ -66,4 +75,7 @@ __all__ = [
     "run_operation_steps",
     "selected_contract_fields",
     "selected_result_fields",
+    "target_extension_schema_path",
+    "target_support_matrix_entries",
+    "validate_target_extension_contract",
 ]
