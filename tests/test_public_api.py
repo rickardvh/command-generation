@@ -246,6 +246,13 @@ def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
     assert loaded["packages"][0]["id"] == "todo-fixture"
 
 
+def test_target_extension_schema_copies_match() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    source_schema = repo_root / "schemas" / "target_extension.schema.json"
+
+    assert source_schema.read_bytes() == target_extension_schema_path().read_bytes()
+
+
 def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
 
