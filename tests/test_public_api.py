@@ -119,6 +119,7 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
                                 "kind": "todo-list/v1",
                                 "item_count": {"$count": "todos"},
                                 "items": {"$value": "todos"},
+                                "requested_format": {"$value": "output_format"},
                             }
                         }
                     },
@@ -209,7 +210,10 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
                     "operation_executor": {
                         "module_file": "primitives.operation_executor",
                         "supported_operation_ids": ["todo.list.report"],
-                        "initial_values": [{"name": "format", "arg": "format", "default": "json"}],
+                        "initial_values": [
+                            {"name": "format", "arg": "format", "default": "json"},
+                            {"name": "output_format", "arg": "format", "default": "json"},
+                        ],
                         "context_roots": [
                             {"name": "todo.package-payload", "generated_root": "_payload", "required_marker": "todos.json"}
                         ],
@@ -263,7 +267,9 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)["item_count"] == 2
+    payload = json.loads(result.stdout)
+    assert payload["item_count"] == 2
+    assert payload["requested_format"] == "json"
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
 
 
@@ -283,7 +289,7 @@ def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> Non
     try:
         from todo_cli_pkg.commands.todo_list_report import invoke
 
-        result = invoke({"format": "json"})
+        result = invoke({"format": "json", "output_format": "text"})
     finally:
         sys.path.remove(str(tmp_path))
         for module_name in list(sys.modules):
@@ -293,6 +299,7 @@ def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> Non
         "kind": "todo-list/v1",
         "item_count": 2,
         "items": [{"title": "Write test"}, {"title": "Run test"}],
+        "requested_format": "text",
     }
 
 

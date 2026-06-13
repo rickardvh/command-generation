@@ -1263,7 +1263,7 @@ def _python_operation_executor_module(
     for item in binding["initial_values"]:
         initial_values.append(f"                {str(item['name'])!r}: getattr(args, {str(item['arg'])!r}, {item.get('default')!r}),")
         callable_initial_values.append(
-            f"                {str(item['name'])!r}: values.get({str(item['arg'])!r}, {item.get('default')!r}),"
+            f"                {str(item['name'])!r}: values.get({str(item['name'])!r}, {item.get('default')!r}),"
         )
     handlers: list[str] = []
     handler_items = []
