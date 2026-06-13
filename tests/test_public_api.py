@@ -267,6 +267,35 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
 
 
+def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+
+    stale = generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    assert stale == []
+    sys.path.insert(0, str(tmp_path))
+    try:
+        from todo_cli_pkg.commands.todo_list_report import invoke
+
+        result = invoke({"format": "json"})
+    finally:
+        sys.path.remove(str(tmp_path))
+        for module_name in list(sys.modules):
+            if module_name == "todo_cli_pkg" or module_name.startswith("todo_cli_pkg."):
+                sys.modules.pop(module_name, None)
+    assert result == {
+        "kind": "todo-list/v1",
+        "item_count": 2,
+        "items": [{"title": "Write test"}, {"title": "Run test"}],
+    }
+
+
 def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
     cache_dir = tmp_path / "payload" / "__pycache__"
