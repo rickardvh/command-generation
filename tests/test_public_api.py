@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import types
@@ -19,6 +20,7 @@ from command_generation import (
     GeneratedOutput,
     PrimitiveContext,
     PrimitiveRegistry,
+    TypescriptFunctionConformanceTarget,
     command_package_schema_path,
     contract_conformance_cases_manifest,
     conformance_ownership_inventory,
@@ -32,6 +34,7 @@ from command_generation import (
     process_case_from_contract,
     render_outputs,
     run_function_conformance_case,
+    run_typescript_function_conformance_case,
     run_cli_conformance_case,
     target_extension_schema_path,
     target_support_matrix_entries,
@@ -235,6 +238,24 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
             }
         ],
     }
+
+
+def _fixture_manifest_with_typescript(tmp_path: Path) -> dict[str, object]:
+    manifest = _fixture_manifest(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    targets = cast(list[object], package["targets"])
+    targets.append(
+        {
+            "kind": "typescript",
+            "package_name": "todo-fixture-typescript",
+            "generated_root": "todo_ts_pkg",
+            "entrypoints": ["todoctl-ts"],
+            "test_environment": "node-dev",
+            "maturity_level_ref": "weak-agent-safe-adapter",
+            "generation_status": "generated",
+        }
+    )
+    return manifest
 
 
 def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
@@ -541,6 +562,38 @@ def test_contract_owned_operation_case_runs_function_adapter() -> None:
     assert result.selected_fields == {"kind": "todo-list/v1", "item_count": 2}
 
 
+def test_contract_owned_operation_case_runs_typescript_function_adapter(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript function conformance")
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+
+    stale = generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+    contract = load_contract_conformance_case("todo.list.operation")
+    case = operation_case_from_contract(contract=contract)
+
+    result, failures = run_typescript_function_conformance_case(
+        case=case,
+        target=TypescriptFunctionConformanceTarget(
+            label="typescript-function",
+            runtime_path=tmp_path / "todo_ts_pkg" / "src" / "runtime.mjs",
+            operation_id="todo.list.report",
+            operation_path="operations/todo.list.report.json",
+            cwd=tmp_path,
+        ),
+    )
+
+    assert stale == []
+    assert failures == []
+    assert result is not None
+    assert result.selected_fields == {"kind": "todo-list/v1", "item_count": 2}
+
+
 def test_contract_owned_operation_case_reports_function_output_drift() -> None:
     contract = load_contract_conformance_case("todo.list.operation")
     case = operation_case_from_contract(contract=contract)
@@ -588,6 +641,7 @@ def test_conformance_ownership_inventory_accounts_for_shared_and_consumer_surfac
         "bundled-conformance-case-resources",
     } <= owned
     assert "FunctionConformanceTarget" in cast(list[str], inventory["extension_points"])
+    assert "TypescriptFunctionConformanceTarget" in cast(list[str], inventory["extension_points"])
     assert "consumer proof routing and installed-package lifecycle tests" in cast(list[str], inventory["consumer_owned"])
     assert "consumer-specific behavior remains in the consumer repo" in str(inventory["completion_rule"])
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import tempfile
 from importlib import resources
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -69,6 +70,18 @@ class OperationConformanceCase:
 class FunctionConformanceTarget:
     label: str
     invoke: OperationInvoker
+
+
+@dataclass(frozen=True)
+class TypescriptFunctionConformanceTarget:
+    label: str
+    runtime_path: Path
+    operation_id: str
+    operation_path: str
+    cwd: Path | None = None
+    node_command: str = "node"
+    function_name: str = "invokeGeneratedOperation"
+    env: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -262,6 +275,76 @@ def run_function_conformance_case(
     )
 
 
+def typescript_function_target(target: TypescriptFunctionConformanceTarget) -> FunctionConformanceTarget:
+    """Adapt a generated TypeScript operation callable to the generic function conformance runner."""
+
+    def invoke(values: Mapping[str, object]) -> object:
+        return invoke_typescript_operation(target=target, values=values)
+
+    return FunctionConformanceTarget(label=target.label, invoke=invoke)
+
+
+def run_typescript_function_conformance_case(
+    *,
+    case: OperationConformanceCase,
+    target: TypescriptFunctionConformanceTarget,
+) -> tuple[FunctionConformanceResult | None, list[FunctionConformanceFailure]]:
+    """Run a direct TypeScript operation callable without exercising CLI argv semantics."""
+
+    return run_function_conformance_case(case=case, target=typescript_function_target(target))
+
+
+def invoke_typescript_operation(*, target: TypescriptFunctionConformanceTarget, values: Mapping[str, object]) -> object:
+    node = shutil.which(target.node_command) if Path(target.node_command).name == target.node_command else target.node_command
+    if node is None:
+        raise RuntimeError(f"Node.js executable is not available: {target.node_command}")
+    payload = {
+        "operationId": target.operation_id,
+        "operationPath": target.operation_path,
+        "values": dict(values),
+    }
+    with tempfile.TemporaryDirectory(prefix="command-generation-typescript-function-") as temp_dir:
+        runner = Path(temp_dir) / "typescript_function_runner.mjs"
+        runner.write_text(
+            "import { pathToFileURL } from 'node:url';\n"
+            "const runtime = await import(pathToFileURL(process.argv[2]).href);\n"
+            "const functionName = process.argv[3];\n"
+            "const payload = JSON.parse(process.argv[4]);\n"
+            "if (typeof runtime[functionName] !== 'function') {\n"
+            "  throw new Error(`missing TypeScript operation function: ${functionName}`);\n"
+            "}\n"
+            "try {\n"
+            "  const output = runtime[functionName](payload);\n"
+            "  process.stdout.write(JSON.stringify({ ok: true, output }));\n"
+            "} catch (error) {\n"
+            "  const message = error && error.stack ? String(error.stack) : String(error);\n"
+            "  process.stdout.write(JSON.stringify({ ok: false, error: message }));\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            [node, str(runner), str(target.runtime_path), target.function_name, json.dumps(payload, sort_keys=True)],
+            cwd=target.cwd,
+            env=dict(target.env) if target.env is not None else None,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"TypeScript operation callable failed: exit={completed.returncode}, stdout={completed.stdout!r}, stderr={completed.stderr!r}"
+        )
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"TypeScript operation callable emitted malformed bridge JSON: {exc}: {completed.stdout!r}") from exc
+    if not isinstance(result, Mapping):
+        raise RuntimeError(f"TypeScript operation callable emitted malformed bridge payload: {result!r}")
+    if not result.get("ok"):
+        raise RuntimeError(str(result.get("error", "TypeScript operation callable failed")))
+    return result.get("output")
+
+
 def conformance_ownership_inventory() -> dict[str, object]:
     """Return the shared conformance surfaces owned by command-generation."""
 
@@ -275,8 +358,8 @@ def conformance_ownership_inventory() -> dict[str, object]:
             },
             {
                 "id": "function-operation-conformance-runner",
-                "surface": "operation_case_from_contract/run_function_conformance_case",
-                "reason": "Generic JSON-shaped operation conformance for direct implementation adapters.",
+                "surface": "operation_case_from_contract/run_function_conformance_case/run_typescript_function_conformance_case",
+                "reason": "Generic JSON-shaped operation conformance for direct implementation adapters, including generated TypeScript callables.",
             },
             {
                 "id": "generated-artifact-freshness",
@@ -297,6 +380,7 @@ def conformance_ownership_inventory() -> dict[str, object]:
         "extension_points": [
             "CliConformanceTarget",
             "FunctionConformanceTarget",
+            "TypescriptFunctionConformanceTarget",
             "PrimitiveRegistry",
             "CommandGenerationHostManifest",
             "CanonicalCommandArtifact",

@@ -2001,14 +2001,14 @@ function listFiles(root, prefix = '') {{
   for (const entry of readdirSync(dir, {{ withFileTypes: true }})) {{
     const child = join(prefix, entry.name);
     if (entry.isDirectory()) out.push(...listFiles(root, child));
-    else if (entry.isFile()) out.push(child.replace(/\\/g, '/'));
+    else if (entry.isFile()) out.push(child.replace(/\\\\/g, '/'));
   }}
   return out.sort();
 }}
 
 function globFiles(root, pattern) {{
   if (!pattern || isAbsolute(pattern) || pattern.split(/[\\/]+/).includes('..')) throw new RuntimeError(`unsupported filesystem.glob pattern: ${{pattern}}`);
-  const normalized = String(pattern).replace(/\\/g, '/');
+  const normalized = String(pattern).replace(/\\\\/g, '/');
   const files = listFiles(root);
   if (normalized === '**/*') return files;
   if (normalized.endsWith('/**/*')) {{
@@ -2118,10 +2118,10 @@ function emitOutput(values) {{
   const result = values.result;
   if (String(values.format ?? 'text') === 'json') return `${{JSON.stringify(result, null, 2)}}\n`;
   if (!isObject(result)) return `${{result}}\n`;
-  if (Array.isArray(result.files) && result.files.every((item) => typeof item === 'string')) return `${{result.files.join('\n')}}\n`;
+  if (Array.isArray(result.files) && result.files.every((item) => typeof item === 'string')) return `${{result.files.join('\\n')}}\n`;
   const lines = [String(result.message ?? result.kind ?? '')];
   for (const action of (Array.isArray(result.actions) ? result.actions : [])) lines.push(`- ${{action.path ?? action.id ?? action.kind}}`);
-  return `${{lines.join('\n').trimEnd()}}\n`;
+  return `${{lines.join('\\n').trimEnd()}}\n`;
 }}
 
 function executeHostPrimitive(primitive, values, args, operationId) {{
@@ -2211,13 +2211,22 @@ function runSteps(operation, values) {{
   return values;
 }}
 
-export function runGeneratedOperation({{ operationId, operationPath, values }}) {{
+function executeGeneratedOperationValues({{ operationId, operationPath, values }}) {{
   if (!operationId) throw new RuntimeError('generated command has no operation id');
   if (!operationPath) throw new RuntimeError(`operation ${{operationId}} has no operation resource path`);
   const resourcePath = resolveInside(resourcesRoot, operationPath);
   if (!existsSync(resourcePath)) throw new RuntimeError(`operation resource is missing: ${{operationPath}}`);
   const operation = readJson(resourcePath);
-  const finalValues = runSteps(operation, {{ ...values }});
+  return runSteps(operation, {{ ...values }});
+}}
+
+export function invokeGeneratedOperation({{ operationId, operationPath, values }}) {{
+  const finalValues = executeGeneratedOperationValues({{ operationId, operationPath, values }});
+  return finalValues.result ?? finalValues.emitted ?? emitOutput({{ ...finalValues, result: finalValues.result }});
+}}
+
+export function runGeneratedOperation({{ operationId, operationPath, values }}) {{
+  const finalValues = executeGeneratedOperationValues({{ operationId, operationPath, values }});
   let output = finalValues.emitted ?? emitOutput({{ ...finalValues, result: finalValues.result }});
   if (typeof output !== 'string') output = `${{JSON.stringify(output, null, 2)}}\n`;
   writeSync(1, output);
