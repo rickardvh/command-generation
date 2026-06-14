@@ -92,4 +92,6 @@ uv run python tests/primitive_conformance.py
 
 This package should become a semver-tagged maintainer dependency with CI-built wheel/sdist artifacts. Downstream repositories should be able to consume immutable package versions instead of Git source refs. Until that release path is in place, source installs may remain a development fallback, but generated runtimes still must not import this package at runtime.
 
+Pull request CI builds wheel and sdist artifacts and proves the built wheel can be installed outside the source tree. Semver releases are created from `vMAJOR.MINOR.PATCH` tags, validate that the tag matches `pyproject.toml`, and attach the built artifacts to the GitHub Release.
+
 See `docs/release-and-versioning.md` for the intended package and compatibility model.

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  test-and-build:
+    name: Test, build, and prove artifact install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install development dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Run lint
+        run: uv run ruff check src tests
+
+      - name: Build package artifacts
+        run: uv build
+
+      - name: Prove wheel installs outside the source tree
+        run: |
+          python -m venv .artifact-venv
+          . .artifact-venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+          cd "$(mktemp -d)"
+          python - <<'PY'
+          import importlib.metadata
+          import command_generation
+
+          print(importlib.metadata.version("command-generation"))
+          print(command_generation.command_package_schema_path())
+          PY
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: command-generation-dist
+          path: dist/*
