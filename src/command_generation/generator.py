@@ -2586,6 +2586,20 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
     return body
 
 
+def _target_scoped_package_resource(package: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+    scoped = dict(package)
+    scoped["targets"] = [dict(target)]
+    if target.get("kind") != "python":
+        scoped.pop("python_runtime_binding", None)
+    scoped["target_resource_scope"] = {
+        "kind": "command-generation/target-scoped-package-resource/v1",
+        "target_kind": str(target.get("kind", "")),
+        "target_package_name": str(target.get("package_name", "")),
+        "rule": "Target resources carry universal command/operation metadata plus only this target's runtime binding.",
+    }
+    return scoped
+
+
 def render_outputs(
     manifest: dict[str, Any],
     *,
@@ -2713,7 +2727,12 @@ def render_outputs(
                         _typescript_module(package, source_path=source_path, regenerate_command=regenerate_command),
                     )
                 )
-                outputs.append(GeneratedOutput(root / "resources" / "command_package.json", _json_block(package) + "\n"))
+                outputs.append(
+                    GeneratedOutput(
+                        root / "resources" / "command_package.json",
+                        _json_block(_target_scoped_package_resource(package, target)) + "\n",
+                    )
+                )
                 outputs.extend(_typescript_resource_copy_outputs(package, repo_root=repo_root, root=root, host_manifest=host))
                 outputs.append(GeneratedOutput(root / "test" / "command-package.test.mjs", _typescript_test(package, target)))
                 if _is_runnable_typescript_target(target):

@@ -60,6 +60,8 @@ Target implementations are declared with `command-generation/target-extension/v1
 
 Targets must not own product operation semantics or require per-operation feature maintenance. Ordinary behavior remains in host-owned operation IR, primitive refs, schemas, and input/output/error cases. Target maintenance is limited to runtime dependency updates, target compatibility work, and projection/runtime-adapter bugs.
 
+Generated target resources are target-scoped. A TypeScript package resource carries universal command and operation metadata plus the TypeScript target declaration, but it does not ship Python runtime binding details as executable fallback metadata. Target-irrelevant runtime bindings stay in the host IR and in the target that actually owns them.
+
 ## Conformance Strategy
 
 - Store behavior examples in host-owned contract resources as stable input/expected-output cases.
