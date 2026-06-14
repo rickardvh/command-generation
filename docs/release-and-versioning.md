@@ -14,6 +14,14 @@ The ordinary downstream path should be:
 
 GitHub source installs are acceptable during development and transition, but they should not remain the ordinary compatibility signal.
 
+## CI And Release Mechanics
+
+Pull request CI builds the package with `uv build`, uploads the `dist/` artifacts, and installs the built wheel into a fresh virtual environment from outside the source tree. That install proof is the ordinary guard against accidentally relying on editable-source imports, untracked files, or repository layout.
+
+Semver releases are cut by pushing a `vMAJOR.MINOR.PATCH` tag. The release workflow validates that the tag version matches `project.version` in `pyproject.toml`, reruns tests and lint, rebuilds wheel/sdist artifacts, proves wheel installation from `dist/`, and attaches the artifacts to the GitHub Release.
+
+Release notes are generated from merged PRs and classify compatibility-significant changes separately. PRs that change the command package IR schema, generated runtime layout, conformance semantics, target extension contract, or primitive behavior should use a compatibility label such as `schema`, `generated-runtime`, `conformance`, or `compatibility`.
+
 ## Compatibility Signals
 
 Release notes should call out changes that affect consumers:

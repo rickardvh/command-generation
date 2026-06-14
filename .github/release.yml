@@ -1,0 +1,14 @@
+changelog:
+  categories:
+    - title: Compatibility-significant changes
+      labels:
+        - compatibility
+        - schema
+        - generated-runtime
+        - conformance
+    - title: Fixes
+      labels:
+        - bug
+    - title: Other changes
+      labels:
+        - "*"
