@@ -335,6 +335,48 @@ def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> Non
     }
 
 
+def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path) -> None:
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    runtime_binding = cast(dict[str, object], command["runtime_binding"])
+    runtime_binding["primitive_refs"] = [*cast(list[str], runtime_binding["primitive_refs"]), "todo.audit"]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    cast(dict[str, object], operation["ir_plan"])["steps"].append(
+        {
+            "id": "audit",
+            "uses": "todo.audit",
+            "arguments": {"message": "fixture rendered"},
+            "outputs": [],
+        }
+    )
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    registry = PrimitiveRegistry.from_definitions(
+        [
+            {
+                "id": "todo.audit",
+                "kind": "host",
+                "description": "Fixture host-owned audit primitive.",
+                "target_support": {"python": "host-implemented", "typescript": "host-implemented"},
+                "owner": "todo fixture",
+            }
+        ]
+    )
+
+    outputs = render_outputs(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+    )
+    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+
+    assert "todo.audit" in rendered["todo_cli_pkg/operations/todo.list.report.json"]
+    assert "todo.audit" in rendered["todo_ts_pkg/resources/operations/todo.list.report.json"]
+
+
 def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
     cache_dir = tmp_path / "payload" / "__pycache__"
@@ -388,6 +430,33 @@ def test_canonical_command_artifacts_exclude_target_specific_package_fields(tmp_
     assert "spawnSync" not in rendered
     assert "argparse" not in rendered
     assert "Dockerfile" not in rendered
+
+
+def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) -> None:
+    outputs = render_outputs(
+        _fixture_manifest_with_typescript(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+    )
+    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+    package_resource = json.loads(rendered["todo_ts_pkg/resources/command_package.json"])
+
+    assert package_resource["target_resource_scope"] == {
+        "kind": "command-generation/target-scoped-package-resource/v1",
+        "target_kind": "typescript",
+        "target_package_name": "todo-fixture-typescript",
+        "rule": "Target resources carry universal command/operation metadata plus only this target's runtime binding.",
+    }
+    assert [target["kind"] for target in package_resource["targets"]] == ["typescript"]
+    assert package_resource["targets"][0]["package_name"] == "todo-fixture-typescript"
+    assert "python_runtime_binding" not in package_resource
+    assert package_resource["commands"][0]["runtime_binding"]["primitive_refs"] == [
+        "filesystem.read",
+        "json.parse",
+        "payload.assemble",
+        "output.emit",
+    ]
 
 
 def test_generated_targets_include_operation_fragment_support(tmp_path: Path) -> None:
