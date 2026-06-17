@@ -64,6 +64,7 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert "contents: write" in workflow
     assert "issues: read" in workflow
     assert "pull-requests: read" in workflow
+    assert 'os.environ["GITHUB_ACTOR"] == "github-actions[bot]"' in workflow
     assert "Merge pull request #(\\d+)" in workflow
     assert "Direct push changed pyproject.toml; releasing explicit version" in workflow
     assert "Package-affecting direct push did not change pyproject.toml" in workflow

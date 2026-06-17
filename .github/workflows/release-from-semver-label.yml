@@ -34,6 +34,7 @@ jobs:
         id: release-bump
         env:
           BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_ACTOR: ${{ github.actor }}
           HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -81,7 +82,7 @@ jobs:
               output("tag", f"v{version}")
 
           message = os.environ["HEAD_COMMIT_MESSAGE"]
-          if re.match(r"^Release v\d+\.\d+\.\d+$", message.strip()):
+          if os.environ["GITHUB_ACTOR"] == "github-actions[bot]" and re.match(r"^Release v\d+\.\d+\.\d+$", message.strip()):
               print("Release bump commit detected; no additional release bump needed.")
               output("release_needed", "false")
               raise SystemExit(0)
