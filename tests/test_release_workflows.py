@@ -1,9 +1,29 @@
 from __future__ import annotations
 
+import fnmatch
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _release_asset_patterns(workflow: str) -> list[str]:
+    lines = workflow.splitlines()
+    files_line = lines.index("          files: |")
+    patterns: list[str] = []
+    for line in lines[files_line + 1 :]:
+        if not line.startswith("            "):
+            break
+        patterns.append(line.strip())
+    return patterns
+
+
+def _matching_release_assets(patterns: list[str], assets: list[str]) -> list[str]:
+    return [
+        asset
+        for asset in assets
+        if any(fnmatch.fnmatchcase(asset, pattern) for pattern in patterns)
+    ]
 
 
 def test_ci_builds_and_proves_install_from_package_artifact() -> None:
@@ -25,8 +45,37 @@ def test_release_workflow_publishes_semver_tag_artifacts() -> None:
     assert "uv build" in workflow
     assert "python -m pip install dist/*.whl" in workflow
     assert "softprops/action-gh-release" in workflow
-    assert "files: dist/*" in workflow
+    assert "sha256sum *.whl *.tar.gz > SHA256SUMS" in workflow
+    assert "files: |" in workflow
+    assert "dist/*.whl" in workflow
+    assert "dist/*.tar.gz" in workflow
+    assert "dist/SHA256SUMS" in workflow
     assert "generate_release_notes: true" in workflow
+
+
+def test_release_asset_patterns_exclude_incidental_dist_files() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    patterns = _release_asset_patterns(workflow)
+
+    assert _matching_release_assets(
+        patterns,
+        [
+            "dist/command_generation-0.1.0-py3-none-any.whl",
+            "dist/command_generation-0.1.0.tar.gz",
+            "dist/SHA256SUMS",
+            "dist/.gitignore",
+            "dist/default.gitignore",
+            "dist/command_generation-0.1.0-py3-none-any.whl.sha256",
+            "dist/command_generation-0.1.0.intoto.jsonl",
+        ],
+    ) == [
+        "dist/command_generation-0.1.0-py3-none-any.whl",
+        "dist/command_generation-0.1.0.tar.gz",
+        "dist/SHA256SUMS",
+    ]
 
 
 def test_release_notes_classify_compatibility_significant_changes() -> None:
