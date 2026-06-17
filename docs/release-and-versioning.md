@@ -18,7 +18,11 @@ GitHub source installs are acceptable during development and transition, but the
 
 Pull request CI builds the package with `uv build`, uploads the `dist/` artifacts, and installs the built wheel into a fresh virtual environment from outside the source tree. That install proof is the ordinary guard against accidentally relying on editable-source imports, untracked files, or repository layout.
 
-Semver releases are cut by pushing a `vMAJOR.MINOR.PATCH` tag. The release workflow validates that the tag version matches `project.version` in `pyproject.toml`, reruns tests and lint, rebuilds wheel/sdist artifacts, proves wheel installation from `dist/`, and attaches the artifacts to the GitHub Release.
+Package-affecting PRs must have exactly one semver label: `semver:major`, `semver:minor`, or `semver:patch`. The semver label is the maintainer-owned compatibility decision for the release bump. Package-affecting paths include `src/`, `schemas/`, `pyproject.toml`, `uv.lock`, and release workflow files.
+
+After a package-affecting PR merges to `master`, CI reads the merged PR label, bumps `project.version` in `pyproject.toml`, updates `uv.lock`, reruns tests and lint, rebuilds wheel/sdist artifacts, proves wheel installation from `dist/`, commits `Release vMAJOR.MINOR.PATCH`, pushes the matching tag, and attaches the artifacts to the GitHub Release.
+
+Semver releases may also be cut by pushing a `vMAJOR.MINOR.PATCH` tag manually when the tag matches `project.version`.
 
 Release notes are generated from merged PRs and classify compatibility-significant changes separately. PRs that change the command package IR schema, generated runtime layout, conformance semantics, target extension contract, or primitive behavior should use a compatibility label such as `schema`, `generated-runtime`, `conformance`, or `compatibility`.
 

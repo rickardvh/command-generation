@@ -36,6 +36,56 @@ def test_ci_builds_and_proves_install_from_package_artifact() -> None:
     assert "actions/upload-artifact" in workflow
 
 
+def test_pr_semver_label_workflow_requires_label_for_package_changes() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "pr-semver-label.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pull_request:" in workflow
+    assert "labeled" in workflow
+    assert "unlabeled" in workflow
+    assert "semver:major" in workflow
+    assert "semver:minor" in workflow
+    assert "semver:patch" in workflow
+    assert '".github/workflows/pr-semver-label.yml"' in workflow
+    assert '".github/workflows/release-from-semver-label.yml"' in workflow
+    assert '"pyproject.toml"' in workflow
+    assert '"schemas/"' in workflow
+    assert '"src/"' in workflow
+    assert "must have exactly one" in workflow
+
+
+def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
+    workflow = (
+        ROOT / ".github" / "workflows" / "release-from-semver-label.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "branches:" in workflow
+    assert "master" in workflow
+    assert "contents: write" in workflow
+    assert "issues: read" in workflow
+    assert "pull-requests: read" in workflow
+    assert "Merge pull request #(\\d+)" in workflow
+    assert "repos/{os.environ['REPOSITORY']}/issues/{pr_number}/labels" in workflow
+    assert "semver:major" in workflow
+    assert "semver:minor" in workflow
+    assert "semver:patch" in workflow
+    assert "uv lock" in workflow
+    assert "uv run pytest" in workflow
+    assert "uv run ruff check src tests" in workflow
+    assert "uv build" in workflow
+    assert "python -m pip install dist/*.whl" in workflow
+    assert "sha256sum *.whl *.tar.gz > SHA256SUMS" in workflow
+    assert "git commit -m \"Release ${{ steps.release-bump.outputs.tag }}\"" in workflow
+    assert 'git tag "${{ steps.release-bump.outputs.tag }}"' in workflow
+    assert 'git push origin "${{ steps.release-bump.outputs.tag }}"' in workflow
+    assert "softprops/action-gh-release" in workflow
+    assert "tag_name: ${{ steps.release-bump.outputs.tag }}" in workflow
+    assert "dist/*.whl" in workflow
+    assert "dist/*.tar.gz" in workflow
+    assert "dist/SHA256SUMS" in workflow
+
+
 def test_release_workflow_publishes_semver_tag_artifacts() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 

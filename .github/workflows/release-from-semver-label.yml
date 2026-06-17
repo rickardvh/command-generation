@@ -1,0 +1,209 @@
+name: Release From Semver Label
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  release-from-label:
+    name: Bump version and tag merged package changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Resolve release bump
+        id: release-bump
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          WATCHED_PATHS = (
+              ".github/workflows/ci.yml",
+              ".github/workflows/pr-semver-label.yml",
+              ".github/workflows/release-from-semver-label.yml",
+              ".github/workflows/release.yml",
+              "pyproject.toml",
+              "schemas/",
+              "src/",
+              "uv.lock",
+          )
+          SEMVER_LABELS = {"semver:major", "semver:minor", "semver:patch"}
+
+          def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+              return subprocess.run(args, check=check, capture_output=True, text=True)
+
+          def output(name: str, value: str) -> None:
+              with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+                  handle.write(f"{name}={value}\n")
+
+          message = os.environ["HEAD_COMMIT_MESSAGE"]
+          if re.match(r"^Release v\d+\.\d+\.\d+$", message.strip()):
+              print("Release bump commit detected; no additional release bump needed.")
+              output("release_needed", "false")
+              raise SystemExit(0)
+
+          before = os.environ["BEFORE_SHA"]
+          if not before or set(before) == {"0"}:
+              before = run("git", "rev-list", "--max-parents=0", "HEAD").stdout.splitlines()[0]
+
+          changed = run("git", "diff", "--name-only", f"{before}...HEAD").stdout.splitlines()
+          package_changed = any(
+              path == watched or path.startswith(watched)
+              for path in changed
+              for watched in WATCHED_PATHS
+          )
+          if not package_changed:
+              print("No package-affecting changes detected; no release bump needed.")
+              output("release_needed", "false")
+              raise SystemExit(0)
+
+          pr_match = re.search(r"Merge pull request #(\d+)", message) or re.search(r"\(#(\d+)\)", message)
+          if not pr_match:
+              print(
+                  "Package-affecting pushes to master must come from a PR with one semver label.",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+
+          pr_number = pr_match.group(1)
+          labels_json = run(
+              "gh",
+              "api",
+              f"repos/{os.environ['REPOSITORY']}/issues/{pr_number}/labels",
+          ).stdout
+          labels = {label["name"] for label in json.loads(labels_json)}
+          selected = sorted(labels & SEMVER_LABELS)
+          if len(selected) != 1:
+              print(
+                  f"PR #{pr_number} must have exactly one semver label before release; got {selected or 'none'}.",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+
+          pyproject = Path("pyproject.toml")
+          data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+          current_version = data["project"]["version"]
+          major, minor, patch = (int(part) for part in current_version.split("."))
+          label = selected[0]
+          if label == "semver:major":
+              major += 1
+              minor = 0
+              patch = 0
+          elif label == "semver:minor":
+              minor += 1
+              patch = 0
+          else:
+              patch += 1
+
+          next_version = f"{major}.{minor}.{patch}"
+          tag = f"v{next_version}"
+          if run("git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False).returncode == 0:
+              print(f"Release tag {tag} already exists.", file=sys.stderr)
+              raise SystemExit(1)
+
+          text = pyproject.read_text(encoding="utf-8")
+          pyproject.write_text(
+              re.sub(r'^version = "[^"]+"$', f'version = "{next_version}"', text, count=1, flags=re.MULTILINE),
+              encoding="utf-8",
+          )
+          output("release_needed", "true")
+          output("version", next_version)
+          output("tag", tag)
+          output("pr_number", pr_number)
+          output("semver_label", label)
+          PY
+
+      - name: Update lockfile
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: uv lock
+
+      - name: Install development dependencies
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: uv sync --all-extras --dev
+
+      - name: Run tests
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: uv run pytest
+
+      - name: Run lint
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: uv run ruff check src tests
+
+      - name: Build package artifacts
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: uv build
+
+      - name: Prove wheel installs outside the source tree
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: |
+          python -m venv .artifact-venv
+          . .artifact-venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+          cd "$(mktemp -d)"
+          python - <<'PY'
+          import importlib.metadata
+          import command_generation
+
+          print(importlib.metadata.version("command-generation"))
+          print(command_generation.command_package_schema_path())
+          PY
+
+      - name: Generate release checksums
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: |
+          cd dist
+          sha256sum *.whl *.tar.gz > SHA256SUMS
+
+      - name: Commit version bump and push release tag
+        if: steps.release-bump.outputs.release_needed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml uv.lock
+          git commit -m "Release ${{ steps.release-bump.outputs.tag }}"
+          git tag "${{ steps.release-bump.outputs.tag }}"
+          git push origin HEAD:master
+          git push origin "${{ steps.release-bump.outputs.tag }}"
+
+      - name: Publish GitHub release
+        if: steps.release-bump.outputs.release_needed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release-bump.outputs.tag }}
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true
+          fail_on_unmatched_files: true

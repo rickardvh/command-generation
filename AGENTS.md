@@ -21,3 +21,8 @@ Boundaries:
 - Report repo-relative paths, not local absolute paths.
 - If the effective CLI is unavailable after trying it, immediately read `.agentic-workspace/WORKFLOW.md` before any other files.
 <!-- agentic-workspace:workflow:end -->
+
+## Release discipline
+
+- Package-affecting PRs must carry exactly one semver label: `semver:major`, `semver:minor`, or `semver:patch`.
+- After a labeled package-affecting PR merges to `master`, CI bumps `project.version`, updates `uv.lock`, creates `vMAJOR.MINOR.PATCH`, proves the package artifact, and publishes the GitHub Release.
