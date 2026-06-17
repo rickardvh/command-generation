@@ -65,8 +65,11 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert "issues: read" in workflow
     assert "pull-requests: read" in workflow
     assert "Merge pull request #(\\d+)" in workflow
-    assert "skipping label-driven release bump" in workflow
+    assert "Direct push changed pyproject.toml; releasing explicit version" in workflow
+    assert "Package-affecting direct push did not change pyproject.toml" in workflow
     assert 'output("release_needed", "false")' in workflow
+    assert "set_release_outputs(current_version)" in workflow
+    assert "parse_version(current_version)" in workflow
     assert "cat-file" in workflow
     assert 'f"{before}^{{commit}}"' in workflow
     assert "repos/{os.environ['REPOSITORY']}/issues/{pr_number}/labels" in workflow
@@ -81,6 +84,8 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert "sha256sum *.whl *.tar.gz > SHA256SUMS" in workflow
     assert "git commit -m \"Release ${{ steps.release-bump.outputs.tag }}\"" in workflow
     assert 'git tag "${{ steps.release-bump.outputs.tag }}"' in workflow
+    assert "git diff --cached --quiet" in workflow
+    assert "git rev-parse origin/master" in workflow
     assert 'git push origin "${{ steps.release-bump.outputs.tag }}"' in workflow
     assert "softprops/action-gh-release" in workflow
     assert "tag_name: ${{ steps.release-bump.outputs.tag }}" in workflow

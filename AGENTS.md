@@ -26,3 +26,4 @@ Boundaries:
 
 - Package-affecting PRs must carry exactly one semver label: `semver:major`, `semver:minor`, or `semver:patch`.
 - After a labeled package-affecting PR merges to `master`, CI bumps `project.version`, updates `uv.lock`, creates `vMAJOR.MINOR.PATCH`, proves the package artifact, and publishes the GitHub Release.
+- Direct package-affecting pushes to `master` may release without a semver label only when they explicitly bump `project.version` in `pyproject.toml`.

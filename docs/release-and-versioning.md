@@ -22,6 +22,8 @@ Package-affecting PRs must have exactly one semver label: `semver:major`, `semve
 
 After a package-affecting PR merges to `master`, CI reads the merged PR label, bumps `project.version` in `pyproject.toml`, updates `uv.lock`, reruns tests and lint, rebuilds wheel/sdist artifacts, proves wheel installation from `dist/`, commits `Release vMAJOR.MINOR.PATCH`, pushes the matching tag, and attaches the artifacts to the GitHub Release.
 
+Direct package-affecting pushes to `master` do not have PR labels to inspect. They may still publish a release when the push explicitly changes `project.version` in `pyproject.toml` to an unreleased `MAJOR.MINOR.PATCH` version. In that path CI uses the explicit version, refreshes `uv.lock`, proves the artifact, tags the existing commit, and publishes the GitHub Release.
+
 Semver releases may also be cut by pushing a `vMAJOR.MINOR.PATCH` tag manually when the tag matches `project.version`.
 
 Release notes are generated from merged PRs and classify compatibility-significant changes separately. PRs that change the command package IR schema, generated runtime layout, conformance semantics, target extension contract, or primitive behavior should use a compatibility label such as `schema`, `generated-runtime`, `conformance`, or `compatibility`.

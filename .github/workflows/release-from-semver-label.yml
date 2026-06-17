@@ -66,6 +66,20 @@ jobs:
               with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
                   handle.write(f"{name}={value}\n")
 
+          def parse_version(version: str) -> tuple[int, int, int]:
+              try:
+                  parts = tuple(int(part) for part in version.split("."))
+              except ValueError:
+                  raise SystemExit(f"Package version must be numeric semver, got {version!r}")
+              if len(parts) != 3:
+                  raise SystemExit(f"Package version must be MAJOR.MINOR.PATCH, got {version!r}")
+              return parts
+
+          def set_release_outputs(version: str) -> None:
+              output("release_needed", "true")
+              output("version", version)
+              output("tag", f"v{version}")
+
           message = os.environ["HEAD_COMMIT_MESSAGE"]
           if re.match(r"^Release v\d+\.\d+\.\d+$", message.strip()):
               print("Release bump commit detected; no additional release bump needed.")
@@ -73,14 +87,6 @@ jobs:
               raise SystemExit(0)
 
           pr_match = re.search(r"Merge pull request #(\d+)", message) or re.search(r"\(#(\d+)\)", message)
-          if not pr_match:
-              print(
-                  "Package-affecting push did not come from a merged PR; "
-                  "skipping label-driven release bump."
-              )
-              output("release_needed", "false")
-              raise SystemExit(0)
-
           before = os.environ["BEFORE_SHA"]
           if not before or set(before) == {"0"}:
               before = run("git", "rev-list", "--max-parents=0", "HEAD").stdout.splitlines()[0]
@@ -98,6 +104,28 @@ jobs:
               output("release_needed", "false")
               raise SystemExit(0)
 
+          pyproject = Path("pyproject.toml")
+          data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+          current_version = data["project"]["version"]
+          parse_version(current_version)
+
+          if not pr_match:
+              if "pyproject.toml" not in changed:
+                  print(
+                      "Package-affecting direct push did not change pyproject.toml; "
+                      "skipping release."
+                  )
+                  output("release_needed", "false")
+                  raise SystemExit(0)
+              tag = f"v{current_version}"
+              if run("git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False).returncode == 0:
+                  print(f"Explicit release version {current_version} already has tag {tag}; skipping release.")
+                  output("release_needed", "false")
+                  raise SystemExit(0)
+              print(f"Direct push changed pyproject.toml; releasing explicit version {current_version}.")
+              set_release_outputs(current_version)
+              raise SystemExit(0)
+
           pr_number = pr_match.group(1)
           labels_json = run(
               "gh",
@@ -113,10 +141,7 @@ jobs:
               )
               raise SystemExit(1)
 
-          pyproject = Path("pyproject.toml")
-          data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-          current_version = data["project"]["version"]
-          major, minor, patch = (int(part) for part in current_version.split("."))
+          major, minor, patch = parse_version(current_version)
           label = selected[0]
           if label == "semver:major":
               major += 1
@@ -139,9 +164,7 @@ jobs:
               re.sub(r'^version = "[^"]+"$', f'version = "{next_version}"', text, count=1, flags=re.MULTILINE),
               encoding="utf-8",
           )
-          output("release_needed", "true")
-          output("version", next_version)
-          output("tag", tag)
+          set_release_outputs(next_version)
           output("pr_number", pr_number)
           output("semver_label", label)
           PY
@@ -194,9 +217,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml uv.lock
-          git commit -m "Release ${{ steps.release-bump.outputs.tag }}"
+          if ! git diff --cached --quiet; then
+            git commit -m "Release ${{ steps.release-bump.outputs.tag }}"
+          fi
           git tag "${{ steps.release-bump.outputs.tag }}"
-          git push origin HEAD:master
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/master)" ]; then
+            git push origin HEAD:master
+          fi
           git push origin "${{ steps.release-bump.outputs.tag }}"
 
       - name: Publish GitHub release
