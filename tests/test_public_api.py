@@ -570,6 +570,35 @@ def test_typescript_cli_append_option_requires_value(tmp_path: Path) -> None:
     assert "--tag requires a value" in result.stderr
 
 
+def test_typescript_cli_append_option_validates_choices(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+    manifest = _fixture_manifest_with_typescript_append_option(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    interface = cast(dict[str, object], command["interface"])
+    tag_option = cast(dict[str, object], cast(list[object], interface["options"])[1])
+    tag_option["choices"] = ["alpha", "beta"]
+
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--tag", "alpha", "--tag", "gamma"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "--tag must be one of: alpha, beta" in result.stderr
+
+
 def test_generated_targets_include_operation_fragment_support(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
