@@ -16,17 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.3
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.13"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
 
@@ -72,9 +72,20 @@ jobs:
               output("release_needed", "false")
               raise SystemExit(0)
 
+          pr_match = re.search(r"Merge pull request #(\d+)", message) or re.search(r"\(#(\d+)\)", message)
+          if not pr_match:
+              print(
+                  "Package-affecting push did not come from a merged PR; "
+                  "skipping label-driven release bump."
+              )
+              output("release_needed", "false")
+              raise SystemExit(0)
+
           before = os.environ["BEFORE_SHA"]
           if not before or set(before) == {"0"}:
               before = run("git", "rev-list", "--max-parents=0", "HEAD").stdout.splitlines()[0]
+          elif run("git", "cat-file", "-e", f"{before}^{{commit}}", check=False).returncode != 0:
+              before = run("git", "rev-parse", "HEAD^").stdout.strip()
 
           changed = run("git", "diff", "--name-only", f"{before}...HEAD").stdout.splitlines()
           package_changed = any(
@@ -86,14 +97,6 @@ jobs:
               print("No package-affecting changes detected; no release bump needed.")
               output("release_needed", "false")
               raise SystemExit(0)
-
-          pr_match = re.search(r"Merge pull request #(\d+)", message) or re.search(r"\(#(\d+)\)", message)
-          if not pr_match:
-              print(
-                  "Package-affecting pushes to master must come from a PR with one semver label.",
-                  file=sys.stderr,
-              )
-              raise SystemExit(1)
 
           pr_number = pr_match.group(1)
           labels_json = run(

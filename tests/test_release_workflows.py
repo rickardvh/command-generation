@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW_ROOT = ROOT / ".github" / "workflows"
 
 
 def _release_asset_patterns(workflow: str) -> list[str]:
@@ -27,7 +28,7 @@ def _matching_release_assets(patterns: list[str], assets: list[str]) -> list[str
 
 
 def test_ci_builds_and_proves_install_from_package_artifact() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    workflow = (WORKFLOW_ROOT / "ci.yml").read_text(encoding="utf-8")
 
     assert "uv build" in workflow
     assert "python -m pip install dist/*.whl" in workflow
@@ -37,9 +38,7 @@ def test_ci_builds_and_proves_install_from_package_artifact() -> None:
 
 
 def test_pr_semver_label_workflow_requires_label_for_package_changes() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "pr-semver-label.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (WORKFLOW_ROOT / "pr-semver-label.yml").read_text(encoding="utf-8")
 
     assert "pull_request:" in workflow
     assert "labeled" in workflow
@@ -56,9 +55,9 @@ def test_pr_semver_label_workflow_requires_label_for_package_changes() -> None:
 
 
 def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
-    workflow = (
-        ROOT / ".github" / "workflows" / "release-from-semver-label.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (WORKFLOW_ROOT / "release-from-semver-label.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "branches:" in workflow
     assert "master" in workflow
@@ -66,6 +65,10 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert "issues: read" in workflow
     assert "pull-requests: read" in workflow
     assert "Merge pull request #(\\d+)" in workflow
+    assert "skipping label-driven release bump" in workflow
+    assert 'output("release_needed", "false")' in workflow
+    assert "cat-file" in workflow
+    assert 'f"{before}^{{commit}}"' in workflow
     assert "repos/{os.environ['REPOSITORY']}/issues/{pr_number}/labels" in workflow
     assert "semver:major" in workflow
     assert "semver:minor" in workflow
@@ -87,7 +90,7 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
 
 
 def test_release_workflow_publishes_semver_tag_artifacts() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    workflow = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
 
     assert '"v*.*.*"' in workflow
     assert "TAG_VERSION=\"${GITHUB_REF_NAME#v}\"" in workflow
@@ -104,9 +107,7 @@ def test_release_workflow_publishes_semver_tag_artifacts() -> None:
 
 
 def test_release_asset_patterns_exclude_incidental_dist_files() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
 
     patterns = _release_asset_patterns(workflow)
 
@@ -135,3 +136,16 @@ def test_release_notes_classify_compatibility_significant_changes() -> None:
     assert "schema" in release_config
     assert "generated-runtime" in release_config
     assert "conformance" in release_config
+
+
+def test_workflows_use_node_24_action_generations() -> None:
+    workflow_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in WORKFLOW_ROOT.glob("*.yml")
+    )
+
+    assert "actions/checkout@v4" not in workflow_text
+    assert "actions/setup-python@v5" not in workflow_text
+    assert "astral-sh/setup-uv@v5" not in workflow_text
+    assert "actions/checkout@v6.0.3" in workflow_text
+    assert "actions/setup-python@v6.2.0" in workflow_text
+    assert "astral-sh/setup-uv@v8.2.0" in workflow_text
