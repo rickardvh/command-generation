@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import shutil
 import subprocess
 import sys
@@ -258,6 +259,30 @@ def _fixture_manifest_with_typescript(tmp_path: Path) -> dict[str, object]:
     return manifest
 
 
+def _fixture_manifest_with_typescript_append_option(tmp_path: Path) -> dict[str, object]:
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    interface = cast(dict[str, object], command["interface"])
+    options = cast(list[object], interface["options"])
+    options.append(
+        {
+            "name": "tags",
+            "flags": ["--tag"],
+            "action": "append",
+            "help": "Tag filter.",
+        }
+    )
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
+    assemble = cast(dict[str, object], steps[2])
+    template = cast(dict[str, object], cast(dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"])["template"])
+    template["tags"] = {"$value": "tags"}
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    return manifest
+
+
 def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
     manifest_path = tmp_path / "command_package_ir.json"
     manifest_path.write_text(json.dumps(_fixture_manifest(tmp_path)), encoding="utf-8")
@@ -319,7 +344,7 @@ def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> Non
     assert stale == []
     sys.path.insert(0, str(tmp_path))
     try:
-        from todo_cli_pkg.commands.todo_list_report import invoke
+        invoke = importlib.import_module("todo_cli_pkg.commands.todo_list_report").invoke
 
         result = invoke({"format": "json", "output_format": "text"})
     finally:
@@ -343,7 +368,8 @@ def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path
     runtime_binding["primitive_refs"] = [*cast(list[str], runtime_binding["primitive_refs"]), "todo.audit"]
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
-    cast(dict[str, object], operation["ir_plan"])["steps"].append(
+    steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
+    steps.append(
         {
             "id": "audit",
             "uses": "todo.audit",
@@ -457,6 +483,91 @@ def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) ->
         "payload.assemble",
         "output.emit",
     ]
+
+
+def test_typescript_cli_append_option_accumulates_repeated_values(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+    manifest = _fixture_manifest_with_typescript_append_option(tmp_path)
+
+    stale = generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "--tag",
+            "alpha",
+            "--tag",
+            "beta",
+            "--format",
+            "json",
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert stale == []
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["tags"] == ["alpha", "beta"]
+
+
+def test_typescript_cli_append_option_defaults_to_empty_list(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+    manifest = _fixture_manifest_with_typescript_append_option(tmp_path)
+
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["tags"] == []
+
+
+def test_typescript_cli_append_option_requires_value(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+    manifest = _fixture_manifest_with_typescript_append_option(tmp_path)
+
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--tag"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "--tag requires a value" in result.stderr
 
 
 def test_generated_targets_include_operation_fragment_support(tmp_path: Path) -> None:
