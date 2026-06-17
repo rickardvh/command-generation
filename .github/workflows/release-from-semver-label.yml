@@ -229,7 +229,7 @@ jobs:
 
       - name: Publish GitHub release
         if: steps.release-bump.outputs.release_needed == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.0
         with:
           tag_name: ${{ steps.release-bump.outputs.tag }}
           files: |

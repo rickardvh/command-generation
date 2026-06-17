@@ -88,7 +88,7 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert "git diff --cached --quiet" in workflow
     assert "git rev-parse origin/master" in workflow
     assert 'git push origin "${{ steps.release-bump.outputs.tag }}"' in workflow
-    assert "softprops/action-gh-release" in workflow
+    assert "softprops/action-gh-release@v3.0.0" in workflow
     assert "tag_name: ${{ steps.release-bump.outputs.tag }}" in workflow
     assert "dist/*.whl" in workflow
     assert "dist/*.tar.gz" in workflow
@@ -103,7 +103,7 @@ def test_release_workflow_publishes_semver_tag_artifacts() -> None:
     assert "Tag ${GITHUB_REF_NAME} does not match pyproject version" in workflow
     assert "uv build" in workflow
     assert "python -m pip install dist/*.whl" in workflow
-    assert "softprops/action-gh-release" in workflow
+    assert "softprops/action-gh-release@v3.0.0" in workflow
     assert "sha256sum *.whl *.tar.gz > SHA256SUMS" in workflow
     assert "files: |" in workflow
     assert "dist/*.whl" in workflow
@@ -152,6 +152,8 @@ def test_workflows_use_node_24_action_generations() -> None:
     assert "actions/checkout@v4" not in workflow_text
     assert "actions/setup-python@v5" not in workflow_text
     assert "astral-sh/setup-uv@v5" not in workflow_text
+    assert "softprops/action-gh-release@v2" not in workflow_text
     assert "actions/checkout@v6.0.3" in workflow_text
     assert "actions/setup-python@v6.2.0" in workflow_text
     assert "astral-sh/setup-uv@v8.2.0" in workflow_text
+    assert "softprops/action-gh-release@v3.0.0" in workflow_text
