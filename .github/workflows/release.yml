@@ -68,9 +68,17 @@ jobs:
           print(command_generation.command_package_schema_path())
           PY
 
+      - name: Generate release checksums
+        run: |
+          cd dist
+          sha256sum *.whl *.tar.gz > SHA256SUMS
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS
           generate_release_notes: true
           fail_on_unmatched_files: true
