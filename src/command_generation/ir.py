@@ -7,6 +7,9 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+COMMAND_PACKAGE_IR_SCHEMA_VERSION = "command-generation/command-package-ir/v1"
+LEGACY_COMMAND_PACKAGE_IR_SCHEMA_VERSION = "agentic-workspace/command-package-ir/v1"
+
 
 def command_package_schema_path() -> Path:
     """Return the package-owned command-package IR schema path."""
@@ -19,6 +22,8 @@ def load_command_package_ir(ir_path: Path, schema_path: Path | None = None) -> d
     """Load and validate command-package IR from explicit paths."""
     effective_schema_path = schema_path or command_package_schema_path()
     ir = json.loads(ir_path.read_text(encoding="utf-8"))
+    if isinstance(ir, dict) and ir.get("schema_version") == LEGACY_COMMAND_PACKAGE_IR_SCHEMA_VERSION:
+        ir = {**ir, "schema_version": COMMAND_PACKAGE_IR_SCHEMA_VERSION}
     schema = json.loads(effective_schema_path.read_text(encoding="utf-8"))
     errors = sorted(Draft202012Validator(schema).iter_errors(ir), key=lambda error: list(error.path))
     if errors:

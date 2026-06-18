@@ -105,7 +105,7 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
         encoding="utf-8",
     )
     operation = {
-        "schema_version": "agentic-workspace/operation/v1",
+        "schema_version": "command-generation/operation/v1",
         "id": "todo.list.report",
         "migration_status": "runtime-consumed",
         "ir_plan": {
@@ -142,7 +142,7 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
         encoding="utf-8",
     )
     return {
-        "schema_version": "agentic-workspace/command-package-ir/v1",
+        "schema_version": "command-generation/command-package-ir/v1",
         "summary": "Non-AW fixture command package.",
         "schema": "schemas/command_package_ir.schema.json",
         "source_contracts": ["contracts/operations/todo.list.report.json"],
@@ -289,6 +289,25 @@ def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
 
     loaded = load_command_package_ir(manifest_path, command_package_schema_path())
 
+    schema = json.loads(command_package_schema_path().read_text(encoding="utf-8"))
+    assert schema["$id"] == "command-generation/command-package-ir.schema.json"
+    assert schema["title"] == "Command Generation Command Package IR"
+    assert schema["properties"]["schema_version"]["const"] == "command-generation/command-package-ir/v1"
+    assert schema["x-command-generation-doc-role"] == "contract-reference"
+    assert "x-agentic-workspace-doc-role" not in schema
+    assert loaded["schema_version"] == "command-generation/command-package-ir/v1"
+    assert loaded["packages"][0]["id"] == "todo-fixture"
+
+
+def test_package_owned_schema_accepts_legacy_aw_schema_version_alias(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+    manifest["schema_version"] = "agentic-workspace/command-package-ir/v1"
+    manifest_path = tmp_path / "command_package_ir.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    loaded = load_command_package_ir(manifest_path, command_package_schema_path())
+
+    assert loaded["schema_version"] == "command-generation/command-package-ir/v1"
     assert loaded["packages"][0]["id"] == "todo-fixture"
 
 

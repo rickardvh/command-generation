@@ -30,6 +30,8 @@ Release notes are generated from merged PRs and classify compatibility-significa
 
 ## Compatibility Signals
 
+The canonical command package IR schema version is `command-generation/command-package-ir/v1`. `load_command_package_ir(...)` accepts the former `agentic-workspace/command-package-ir/v1` value as a transitional compatibility alias and canonicalizes loaded manifests to the command-generation namespace. Changing the canonical schema namespace or removing an alias is compatibility-significant.
+
 Release notes should call out changes that affect consumers:
 
 - command package IR schema shape;

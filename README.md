@@ -42,6 +42,8 @@ Generated runtimes should be self-contained with respect to this package. If a g
 
 Host repositories provide command package manifests that describe commands, operation refs, target projections, runtime bindings, resource copies, maturity policy, and generated output locations. This package validates and renders those manifests, but the manifest remains host-owned.
 
+The canonical command package IR schema version is `command-generation/command-package-ir/v1`. The loader accepts the legacy `agentic-workspace/command-package-ir/v1` value as a transitional alias and returns the canonical command-generation value after loading.
+
 The IR should express stable command and operation intent. Target renderers may project that intent into Python modules, TypeScript modules, CLI adapters, or future adapter surfaces. Generated files are outputs, not the source of truth.
 
 ## Operation Callables And Wrappers
