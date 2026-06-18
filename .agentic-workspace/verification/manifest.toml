@@ -1,0 +1,25 @@
+schema_version = "agentic-workspace/verification-manifest/v1"
+
+[protocols.primitive_conformance]
+title = "Primitive conformance"
+purpose = "Repeatable host-owned verification for portable primitive execution, public conformance APIs, and payload verification behavior."
+applies_to_paths = [
+  "src/command_generation/**",
+  "tests/test_primitive_executor.py",
+  "tests/test_public_api.py",
+]
+scenario_refs = ["primitive_conformance_pytest"]
+expected_evidence = ["primitive_conformance_passed"]
+review_owner = "command-generation-maintainers"
+
+[scenarios.primitive_conformance_pytest]
+protocol_id = "primitive_conformance"
+title = "Primitive conformance pytest lanes"
+steps = [
+  "Run `uv run pytest tests/test_public_api.py -q`.",
+  "Run `uv run pytest tests/test_primitive_executor.py -q`.",
+]
+expected_observations = [
+  "The public API conformance tests pass.",
+  "The primitive executor tests pass.",
+]
