@@ -76,6 +76,8 @@ Generated target resources are target-scoped. A TypeScript package resource carr
 
 Generated package resources carry `generation_metadata` with the `command-generation` package version, source IR schema version, target kind, target package name, and target layout version. Hosts can compare that metadata against their pinned generator version without importing `command_generation` from generated runtimes.
 
+`render_outputs(...)` records the manifest schema version it is given. Hosts that need canonical provenance should load manifests through `load_command_package_ir(...)` first so legacy schema aliases are normalized before rendering.
+
 ## Conformance Strategy
 
 - Store behavior examples in host-owned contract resources as stable input/expected-output cases.
