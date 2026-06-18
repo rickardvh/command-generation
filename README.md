@@ -24,6 +24,16 @@ Host repositories own:
 
 Generated runtimes should be self-contained with respect to this package. If a generated CLI/function package imports `command_generation` at runtime, that is a boundary violation.
 
+## Primitive Ownership
+
+Built-in primitive definitions carry a `kind` classification:
+
+- `portable`: package-owned generic dataflow, filesystem, parsing, payload assembly, or output mechanics.
+- `host-owned`: host-provided runtime bridges such as Python callable or TypeScript domain execution hooks.
+- `transitional`: product-shaped installed-payload or current-memory helpers retained for compatibility with existing generated packages while hosts move those semantics behind host-owned registries.
+
+The exported `BUILTIN_PORTABLE_PRIMITIVES` name is retained for API compatibility. Consumers should inspect each `PrimitiveDefinition.kind` instead of assuming every entry is package-owned portable behavior.
+
 ## Public API
 
 - `load_command_package_ir(path, schema_path=None)` validates IR against the package-owned schema.

@@ -38,9 +38,12 @@ class PrimitiveDefinition:
         normalized_refs = [str(item) for item in refs if str(item).strip()]
         if singular_ref and singular_ref not in normalized_refs:
             normalized_refs.append(singular_ref)
+        raw_kind = str(raw.get("kind", "portable")).strip() or "portable"
+        kind_aliases = {"host": "host-owned"}
+        normalized_kind = kind_aliases.get(raw_kind, raw_kind)
         return cls(
             id=primitive_id,
-            kind=str(raw.get("kind", "portable")).strip() or "portable",
+            kind=normalized_kind,
             input_schema=object_field("input_schema"),
             input_schema_ref=str(raw.get("input_schema_ref", "")).strip(),
             output_schema=object_field("output_schema"),
@@ -115,22 +118,114 @@ class PrimitiveRegistry:
 
 BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
     [
-        {"id": "path.target_root.resolve", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "workspace.root.resolve", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "filesystem.exists", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "filesystem.read", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "filesystem.glob", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "json.parse", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "toml.table.counts", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "payload.assemble", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "payload.status", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "payload.lifecycle-plan", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "payload.current-memory", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "payload.verify", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "output.emit", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "output.emit.install-result", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "output.emit.current-memory", "kind": "portable", "target_support": {"python": "implemented", "typescript": "implemented"}},
-        {"id": "python.function.call", "kind": "host", "target_support": {"python": "host-implemented", "typescript": "host-implemented"}},
-        {"id": "typescript.domain.execute", "kind": "host", "target_support": {"typescript": "host-implemented"}},
+        {
+            "id": "path.target_root.resolve",
+            "kind": "portable",
+            "description": "Resolve a caller-supplied target path under the execution working directory.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "workspace.root.resolve",
+            "kind": "transitional",
+            "owner": "host",
+            "description": "Legacy workspace-shaped root resolver retained for existing generated packages.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "filesystem.exists",
+            "kind": "portable",
+            "description": "Check for a file or directory under a declared primitive root.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "filesystem.read",
+            "kind": "portable",
+            "description": "Read UTF-8 text from a declared primitive root.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "filesystem.glob",
+            "kind": "portable",
+            "description": "List paths under a declared primitive root.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "json.parse",
+            "kind": "portable",
+            "description": "Parse JSON text from operation values.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "toml.table.counts",
+            "kind": "portable",
+            "description": "Count TOML table rows by status-like fields without host-specific policy.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "payload.assemble",
+            "kind": "portable",
+            "description": "Assemble generic file, skill, template, or package-file-list payloads.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "payload.status",
+            "kind": "transitional",
+            "owner": "host",
+            "description": "Installed-payload status policy retained for existing AW-style package manifests.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "payload.lifecycle-plan",
+            "kind": "transitional",
+            "owner": "host",
+            "description": "Installed-payload lifecycle policy retained for existing AW-style package manifests.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "payload.current-memory",
+            "kind": "transitional",
+            "owner": "host",
+            "description": "Current-memory payload policy retained for existing AW-style package manifests.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "payload.verify",
+            "kind": "transitional",
+            "owner": "host",
+            "description": "Installed-payload verification policy retained for existing AW-style package manifests.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "output.emit",
+            "kind": "portable",
+            "description": "Emit JSON or compact text from a result payload.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "output.emit.install-result",
+            "kind": "transitional",
+            "owner": "host",
+            "description": "Installed-payload text projection retained for existing AW-style package manifests.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "output.emit.current-memory",
+            "kind": "transitional",
+            "owner": "host",
+            "description": "Current-memory text projection retained for existing AW-style package manifests.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
+            "id": "python.function.call",
+            "kind": "host-owned",
+            "description": "Host-provided Python callable bridge.",
+            "target_support": {"python": "host-implemented", "typescript": "host-implemented"},
+        },
+        {
+            "id": "typescript.domain.execute",
+            "kind": "host-owned",
+            "description": "Host-provided TypeScript domain runtime bridge.",
+            "target_support": {"typescript": "host-implemented"},
+        },
     ]
 )

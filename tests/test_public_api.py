@@ -401,7 +401,7 @@ def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path
         [
             {
                 "id": "todo.audit",
-                "kind": "host",
+                "kind": "host-owned",
                 "description": "Fixture host-owned audit primitive.",
                 "target_support": {"python": "host-implemented", "typescript": "host-implemented"},
                 "owner": "todo fixture",
@@ -1046,7 +1046,7 @@ def test_primitive_registry_round_trips_host_metadata() -> None:
         [
             {
                 "id": "todo.domain.load",
-                "kind": "host",
+                "kind": "host-owned",
                 "description": "Load fixture domain payload.",
                 "input_schema_ref": "contracts/operations/todo.list.report.json#/inputs",
                 "output_schema_ref": "contracts/operations/todo.list.report.json#/output",
@@ -1073,6 +1073,25 @@ def test_primitive_registry_round_trips_host_metadata() -> None:
 def test_builtin_registry_declares_portable_primitives() -> None:
     assert "filesystem.read" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "output.emit" in BUILTIN_PORTABLE_PRIMITIVES.ids()
+
+
+def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
+    definitions = {item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()}
+
+    assert {item["kind"] for item in definitions.values()} <= {"portable", "host-owned", "transitional"}
+    assert definitions["filesystem.read"]["kind"] == "portable"
+    assert definitions["json.parse"]["kind"] == "portable"
+    assert definitions["payload.status"]["kind"] == "transitional"
+    assert definitions["payload.verify"]["kind"] == "transitional"
+    assert definitions["payload.current-memory"]["kind"] == "transitional"
+    assert definitions["output.emit.current-memory"]["kind"] == "transitional"
+    assert definitions["python.function.call"]["kind"] == "host-owned"
+    assert definitions["typescript.domain.execute"]["kind"] == "host-owned"
+
+    transitional = [item for item in definitions.values() if item["kind"] == "transitional"]
+    assert transitional
+    assert all(item["owner"] == "host" for item in transitional)
+    assert all(item["description"] for item in definitions.values())
 
 
 def _target_extension_contract(**overrides: object) -> dict[str, object]:
