@@ -31,8 +31,10 @@ from command_generation import (
     load_command_package_ir,
     load_contract_conformance_case,
     materialize_case_fixture,
+    missing_target_proof_matrix_entries,
     operation_case_from_contract,
     process_case_from_contract,
+    required_target_proof_matrix_entries,
     render_outputs,
     run_function_conformance_case,
     run_typescript_function_conformance_case,
@@ -41,7 +43,11 @@ from command_generation import (
     target_support_matrix_entries,
     validate_target_extension_contract,
 )
-from command_generation.target_extension import TargetExtensionContract, TargetExtensionContractError
+from command_generation.target_extension import (
+    TargetExtensionContract,
+    TargetExtensionContractError,
+    current_target_proof_evidence_inventory,
+)
 from command_generation.targets.python import _python_local_runtime_binding_module
 
 
@@ -347,6 +353,34 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     assert payload["item_count"] == 2
     assert payload["requested_format"] == "json"
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
+
+
+def test_non_aw_fixture_python_cli_reports_parser_failure(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); from todo_cli_pkg.cli import main; raise SystemExit(main(['list', '--format', 'yaml']))",
+            str(tmp_path),
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "invalid choice" in result.stderr
 
 
 def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> None:
@@ -1124,6 +1158,7 @@ def _target_extension_contract(**overrides: object) -> dict[str, object]:
         "operation_callable_surface": {
             "adapter_id": "python.function",
             "input_model": "operation-values",
+            "structured_errors": True,
         },
         "wrapper_adapter_shape": {
             "owns": ["argv parsing", "exit-code mapping"],
@@ -1152,6 +1187,25 @@ def _target_extension_contract(**overrides: object) -> dict[str, object]:
     return contract
 
 
+def _typescript_target_extension_contract() -> dict[str, object]:
+    return _target_extension_contract(
+        target_id="typescript",
+        operation_callable_surface={
+            "adapter_id": "typescript.function",
+            "input_model": "operation-values",
+            "structured_errors": False,
+        },
+        wrapper_adapter_shape={
+            "owns": ["argv parsing", "exit-code mapping"],
+        },
+        support_declaration={
+            "matrix_inclusion": "automatic-when-target-implemented",
+            "adapter_ids": ["typescript.function"],
+            "primitive_support": "declared",
+        },
+    )
+
+
 def test_target_extension_contract_validates_and_projects_matrix_entries() -> None:
     contract = TargetExtensionContract.from_mapping(_target_extension_contract())
 
@@ -1170,6 +1224,39 @@ def test_target_extension_contract_validates_and_projects_matrix_entries() -> No
             "source": "target-extension support declaration",
         },
     )
+
+
+def test_required_target_proof_matrix_requires_evidence_for_implemented_targets() -> None:
+    required = required_target_proof_matrix_entries([_target_extension_contract(), _typescript_target_extension_contract()])
+    evidence_inventory = current_target_proof_evidence_inventory()
+    evidence_ids = {item["evidence_id"] for item in evidence_inventory}
+
+    assert {entry["proof_kind"] for entry in required} == {
+        "direct-operation-success",
+        "direct-operation-structured-error",
+        "cli-process-success",
+        "cli-process-parser-failure",
+        "generated-artifact-freshness",
+        "generated-runtime-boundary",
+        "unsupported-primitive-target",
+    }
+    assert all(item["source"].startswith("tests/test_public_api.py::test_") for item in evidence_inventory)
+    assert missing_target_proof_matrix_entries(required, evidence_ids) == ()
+
+
+def test_required_target_proof_matrix_reports_missing_evidence() -> None:
+    required = required_target_proof_matrix_entries([_target_extension_contract()])
+
+    missing = missing_target_proof_matrix_entries(required, {"python:python.function:direct-operation-success"})
+
+    assert {entry["proof_kind"] for entry in missing} == {
+        "direct-operation-structured-error",
+        "cli-process-success",
+        "cli-process-parser-failure",
+        "generated-artifact-freshness",
+        "generated-runtime-boundary",
+        "unsupported-primitive-target",
+    }
 
 
 def test_target_extension_support_matrix_waits_for_implemented_target() -> None:

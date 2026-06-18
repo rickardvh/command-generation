@@ -10,6 +10,45 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 
+REQUIRED_TARGET_PROOF_KINDS: tuple[dict[str, str], ...] = (
+    {
+        "proof_kind": "direct-operation-success",
+        "surface": "function",
+        "applies_when": "operation callable adapter is declared",
+    },
+    {
+        "proof_kind": "direct-operation-structured-error",
+        "surface": "function",
+        "applies_when": "operation callable adapter declares structured error support",
+    },
+    {
+        "proof_kind": "cli-process-success",
+        "surface": "process",
+        "applies_when": "wrapper adapter owns argv parsing or process behavior",
+    },
+    {
+        "proof_kind": "cli-process-parser-failure",
+        "surface": "process",
+        "applies_when": "wrapper adapter owns argv parsing",
+    },
+    {
+        "proof_kind": "generated-artifact-freshness",
+        "surface": "freshness",
+        "applies_when": "target is implemented",
+    },
+    {
+        "proof_kind": "generated-runtime-boundary",
+        "surface": "runtime-boundary",
+        "applies_when": "target is implemented",
+    },
+    {
+        "proof_kind": "unsupported-primitive-target",
+        "surface": "primitive-support",
+        "applies_when": "target support depends on primitive declarations",
+    },
+)
+
+
 class TargetExtensionContractError(ValueError):
     """Raised when a target extension contract would make targets own behavior."""
 
@@ -108,3 +147,126 @@ def target_support_matrix_entries(
                 }
             )
     return tuple(entries)
+
+
+def required_target_proof_matrix_entries(
+    contracts: Sequence[TargetExtensionContract | Mapping[str, Any]],
+) -> tuple[dict[str, str], ...]:
+    """Project implemented target-extension contracts into required generic proof rows."""
+
+    entries: list[dict[str, str]] = []
+    for contract_or_mapping in contracts:
+        contract = (
+            contract_or_mapping
+            if isinstance(contract_or_mapping, TargetExtensionContract)
+            else TargetExtensionContract.from_mapping(contract_or_mapping)
+        )
+        if contract.implementation_status != "implemented":
+            continue
+        adapter_id = str(contract.operation_callable_surface.get("adapter_id", "")).strip()
+        raw_wrapper_owns = contract.wrapper_adapter_shape.get("owns", ())
+        wrapper_owns = (
+            {str(item) for item in raw_wrapper_owns}
+            if isinstance(raw_wrapper_owns, Sequence) and not isinstance(raw_wrapper_owns, (str, bytes))
+            else set()
+        )
+        primitive_support = str(contract.support_declaration.get("primitive_support", "declared")).strip() or "declared"
+
+        if adapter_id:
+            entries.append(_proof_entry(contract, "direct-operation-success", adapter_id=adapter_id))
+            if contract.operation_callable_surface.get("structured_errors") is True:
+                entries.append(_proof_entry(contract, "direct-operation-structured-error", adapter_id=adapter_id))
+        if "argv parsing" in wrapper_owns or "process behavior" in wrapper_owns or "exit-code mapping" in wrapper_owns:
+            entries.append(_proof_entry(contract, "cli-process-success", adapter_id=adapter_id or "process"))
+        if "argv parsing" in wrapper_owns:
+            entries.append(_proof_entry(contract, "cli-process-parser-failure", adapter_id=adapter_id or "process"))
+        entries.append(_proof_entry(contract, "generated-artifact-freshness", adapter_id=adapter_id or contract.target_id))
+        entries.append(_proof_entry(contract, "generated-runtime-boundary", adapter_id=adapter_id or contract.target_id))
+        if primitive_support != "not-applicable":
+            entries.append(_proof_entry(contract, "unsupported-primitive-target", adapter_id=adapter_id or contract.target_id))
+    return tuple(entries)
+
+
+def missing_target_proof_matrix_entries(
+    required_entries: Sequence[Mapping[str, str]], evidence_ids: Sequence[str] | set[str] | tuple[str, ...]
+) -> tuple[dict[str, str], ...]:
+    """Return required target proof rows that are not backed by explicit evidence ids."""
+
+    evidence = {str(item) for item in evidence_ids}
+    return tuple(dict(entry) for entry in required_entries if str(entry.get("evidence_id", "")) not in evidence)
+
+
+def current_target_proof_evidence_inventory() -> tuple[dict[str, str], ...]:
+    """Return package-owned evidence ids for currently implemented target proof rows."""
+
+    evidence = [
+        (
+            "python:python.function:direct-operation-success",
+            "tests/test_public_api.py::test_contract_owned_operation_case_runs_function_adapter",
+        ),
+        (
+            "python:python.function:direct-operation-structured-error",
+            "tests/test_public_api.py::test_contract_owned_operation_case_checks_expected_function_error",
+        ),
+        (
+            "python:python.function:cli-process-success",
+            "tests/test_public_api.py::test_contract_owned_conformance_case_runs_black_box_cli",
+        ),
+        (
+            "python:python.function:cli-process-parser-failure",
+            "tests/test_public_api.py::test_non_aw_fixture_python_cli_reports_parser_failure",
+        ),
+        (
+            "python:python.function:generated-artifact-freshness",
+            "tests/test_public_api.py::test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family",
+        ),
+        (
+            "python:python.function:generated-runtime-boundary",
+            "tests/test_public_api.py::test_generic_generator_source_has_no_aw_product_literals",
+        ),
+        (
+            "python:python.function:unsupported-primitive-target",
+            "tests/test_public_api.py::test_primitive_registry_rejects_unsupported_target",
+        ),
+        (
+            "typescript:typescript.function:direct-operation-success",
+            "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
+        ),
+        (
+            "typescript:typescript.function:cli-process-success",
+            "tests/test_public_api.py::test_typescript_cli_append_option_accumulates_repeated_values",
+        ),
+        (
+            "typescript:typescript.function:cli-process-parser-failure",
+            "tests/test_public_api.py::test_typescript_cli_append_option_requires_value",
+        ),
+        (
+            "typescript:typescript.function:generated-artifact-freshness",
+            "tests/test_public_api.py::test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family",
+        ),
+        (
+            "typescript:typescript.function:generated-runtime-boundary",
+            "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
+        ),
+        (
+            "typescript:typescript.function:unsupported-primitive-target",
+            "tests/test_public_api.py::test_primitive_registry_round_trips_host_metadata",
+        ),
+    ]
+    return tuple(
+        {
+            "evidence_id": evidence_id,
+            "source": source,
+        }
+        for evidence_id, source in evidence
+    )
+
+
+def _proof_entry(contract: TargetExtensionContract, proof_kind: str, *, adapter_id: str) -> dict[str, str]:
+    return {
+        "target_id": contract.target_id,
+        "adapter_id": adapter_id,
+        "proof_kind": proof_kind,
+        "evidence_id": f"{contract.target_id}:{adapter_id}:{proof_kind}",
+        "source": "required target proof matrix",
+    }
