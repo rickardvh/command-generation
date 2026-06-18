@@ -38,6 +38,7 @@ Release notes should call out changes that affect consumers:
 - generated Python or TypeScript artifact layout;
 - generated artifact provenance metadata shape;
 - generated callable or CLI adapter contracts;
+- stable public API removals or signature changes;
 - portable primitive behavior;
 - conformance runner input or expected-output semantics;
 - package-owned fixture case changes that consumers use as proof anchors.

@@ -48,6 +48,8 @@ The exported `BUILTIN_PORTABLE_PRIMITIVES` name is retained for API compatibilit
 - `contract_conformance_cases_manifest()` and `load_contract_conformance_case(...)` expose package-owned reusable conformance cases.
 - `conformance_ownership_inventory()` reports the shared conformance surfaces owned here and the consumer-owned surfaces that should stay out of this package.
 
+See [Public API Classification](docs/public-api.md) for stable and provisional `command_generation.__all__` exports.
+
 ## Command Package IR
 
 Host repositories provide command package manifests that describe commands, operation refs, target projections, runtime bindings, resource copies, maturity policy, and generated output locations. This package validates and renders those manifests, but the manifest remains host-owned.
