@@ -14,6 +14,7 @@ from command_generation.targets.contract import (
     _local_runtime_bindings,
     _operation_executor_binding,
     _operation_executor_import_for_binding,
+    package_resource_with_generation_metadata,
     _python_adapter_command_payload,
     _python_adapter_commands,
     _python_resource_copies,
@@ -1409,13 +1410,27 @@ def render_python_outputs(
     repo_root: Path,
     root: Path,
     maturity_levels: dict[str, dict[str, Any]],
+    manifest_schema_version: str,
     source_path: str,
     regenerate_command: str,
 ) -> list[GeneratedOutput]:
     outputs: list[GeneratedOutput] = []
     module_path = root / "cli.py"
     outputs.append(GeneratedOutput(root / "__init__.py", "from .cli import *  # noqa: F403\n"))
-    outputs.append(GeneratedOutput(root / "command_package.json", _json_block(package) + "\n"))
+    outputs.append(
+        GeneratedOutput(
+            root / "command_package.json",
+            _json_block(
+                package_resource_with_generation_metadata(
+                    package,
+                    manifest_schema_version=manifest_schema_version,
+                    target=target,
+                    target_layout_version="command-generation/python-target-layout/v1",
+                )
+            )
+            + "\n",
+        )
+    )
     if _is_runtime_backed_python_target(target):
         outputs.extend(_runtime_consumed_operation_outputs(package, repo_root=repo_root, root=root))
         outputs.extend(_python_resource_copy_outputs(package, repo_root=repo_root, root=root))

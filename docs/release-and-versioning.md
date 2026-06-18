@@ -36,6 +36,7 @@ Release notes should call out changes that affect consumers:
 
 - command package IR schema shape;
 - generated Python or TypeScript artifact layout;
+- generated artifact provenance metadata shape;
 - generated callable or CLI adapter contracts;
 - portable primitive behavior;
 - conformance runner input or expected-output semantics;
