@@ -1,6 +1,6 @@
 [project]
 name = "command-generation"
-version = "0.2.0"
+version = "0.2.1"
 description = "Command generation package extracted from Agentic Workspace."
 authors = [
     { name = "Rickard von Haugwitz", email = "rickardvh@gmail.com" }
