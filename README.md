@@ -74,6 +74,8 @@ Targets must not own product operation semantics or require per-operation featur
 
 Generated target resources are target-scoped. A TypeScript package resource carries universal command and operation metadata plus the TypeScript target declaration, but it does not ship Python runtime binding details as executable fallback metadata. Target-irrelevant runtime bindings stay in the host IR and in the target that actually owns them.
 
+Generated package resources carry `generation_metadata` with the `command-generation` package version, source IR schema version, target kind, target package name, and target layout version. Hosts can compare that metadata against their pinned generator version without importing `command_generation` from generated runtimes.
+
 ## Conformance Strategy
 
 - Store behavior examples in host-owned contract resources as stable input/expected-output cases.

@@ -10,6 +10,8 @@ from command_generation.targets.contract import (
     _command_operation_refs,
     _is_runnable_typescript_target,
     _json_block,
+    generated_artifact_metadata,
+    package_resource_with_generation_metadata,
     _python_adapter_commands,
     _python_resource_copies,
     _resource_copy_source_files,
@@ -114,6 +116,7 @@ def _typescript_package_json(
     maturity: dict[str, Any],
     runtime_binding: dict[str, Any],
     *,
+    manifest_schema_version: str,
     source_path: str,
 ) -> str:
     payload = {
@@ -133,6 +136,11 @@ def _typescript_package_json(
                 "selected_model": "generated parser, validation, and native TypeScript/Node command execution",
                 "runtime_dependency": "node-only",
             },
+            "generationMetadata": generated_artifact_metadata(
+                manifest_schema_version=manifest_schema_version,
+                target=target,
+                target_layout_version="command-generation/typescript-target-layout/v1",
+            ),
             "effectiveRuntimeCommand": None,
             "source": source_path,
             "program": package["program"],
@@ -954,8 +962,13 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
     return body
 
 
-def _target_scoped_package_resource(package: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
-    scoped = dict(package)
+def _target_scoped_package_resource(package: dict[str, Any], target: dict[str, Any], *, manifest_schema_version: str) -> dict[str, Any]:
+    scoped = package_resource_with_generation_metadata(
+        package,
+        manifest_schema_version=manifest_schema_version,
+        target=target,
+        target_layout_version="command-generation/typescript-target-layout/v1",
+    )
     scoped["targets"] = [dict(target)]
     if target.get("kind") != "python":
         scoped.pop("python_runtime_binding", None)
@@ -976,6 +989,7 @@ def render_typescript_outputs(
     root: Path,
     maturity_levels: dict[str, dict[str, Any]],
     runtime_binding: dict[str, Any],
+    manifest_schema_version: str,
     source_path: str,
     regenerate_command: str,
     host_manifest: CommandGenerationHostManifest,
@@ -983,7 +997,14 @@ def render_typescript_outputs(
     outputs = [
         GeneratedOutput(
             root / "package.json",
-            _typescript_package_json(package, target, maturity_levels[target["maturity_level_ref"]], runtime_binding, source_path=source_path),
+            _typescript_package_json(
+                package,
+                target,
+                maturity_levels[target["maturity_level_ref"]],
+                runtime_binding,
+                manifest_schema_version=manifest_schema_version,
+                source_path=source_path,
+            ),
         ),
         GeneratedOutput(
             root / "src" / "commandPackage.ts",
@@ -991,7 +1012,7 @@ def render_typescript_outputs(
         ),
         GeneratedOutput(
             root / "resources" / "command_package.json",
-            _json_block(_target_scoped_package_resource(package, target)) + "\n",
+            _json_block(_target_scoped_package_resource(package, target, manifest_schema_version=manifest_schema_version)) + "\n",
         ),
     ]
     outputs.extend(_typescript_resource_copy_outputs(package, repo_root=repo_root, root=root, host_manifest=host_manifest))

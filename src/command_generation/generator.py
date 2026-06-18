@@ -74,6 +74,7 @@ def render_outputs(
     host = CommandGenerationHostManifest.from_mapping(host_manifest, repo_root=repo_root)
     maturity_levels = _maturity_levels(manifest)
     runtime_binding = manifest["generation_policy"]["non_python_runtime_binding"]
+    manifest_schema_version = str(manifest.get("schema_version", ""))
     for package in manifest["packages"]:
         for target in package["targets"]:
             _validate_target_primitive_support(package, target, repo_root=repo_root, host_manifest=host)
@@ -86,6 +87,7 @@ def render_outputs(
                         repo_root=repo_root,
                         root=root,
                         maturity_levels=maturity_levels,
+                        manifest_schema_version=manifest_schema_version,
                         source_path=source_path,
                         regenerate_command=regenerate_command,
                     )
@@ -99,6 +101,7 @@ def render_outputs(
                         root=root,
                         maturity_levels=maturity_levels,
                         runtime_binding=runtime_binding,
+                        manifest_schema_version=manifest_schema_version,
                         source_path=source_path,
                         regenerate_command=regenerate_command,
                         host_manifest=host,
@@ -138,4 +141,3 @@ def generate_command_packages(
 def _read_generated_text(path: Path) -> str:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return handle.read()
-

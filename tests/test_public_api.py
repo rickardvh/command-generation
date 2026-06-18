@@ -7,6 +7,7 @@ import subprocess
 import sys
 import types
 from collections.abc import Callable, Mapping
+from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import cast
 
@@ -353,6 +354,16 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     assert payload["item_count"] == 2
     assert payload["requested_format"] == "json"
     assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
+    package_resource = json.loads((tmp_path / "todo_cli_pkg" / "command_package.json").read_text(encoding="utf-8"))
+    metadata = package_resource["generation_metadata"]
+    assert metadata["schema_version"] == "command-generation/generated-artifact-metadata/v1"
+    assert metadata["generator"] == {"package": "command-generation", "version": package_version("command-generation")}
+    assert metadata["source_ir"]["schema_version"] == "command-generation/command-package-ir/v1"
+    assert metadata["target"] == {
+        "kind": "python",
+        "package_name": "todo-fixture",
+        "layout_version": "command-generation/python-target-layout/v1",
+    }
 
 
 def test_non_aw_fixture_python_cli_reports_parser_failure(tmp_path: Path) -> None:
@@ -520,6 +531,7 @@ def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) ->
     )
     rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
     package_resource = json.loads(rendered["todo_ts_pkg/resources/command_package.json"])
+    package_json = json.loads(rendered["todo_ts_pkg/package.json"])
 
     assert package_resource["target_resource_scope"] == {
         "kind": "command-generation/target-scoped-package-resource/v1",
@@ -536,6 +548,15 @@ def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) ->
         "payload.assemble",
         "output.emit",
     ]
+    metadata = package_resource["generation_metadata"]
+    assert metadata == package_json["agenticWorkspace"]["generationMetadata"]
+    assert metadata["generator"]["version"] == package_version("command-generation")
+    assert metadata["source_ir"]["schema_version"] == "command-generation/command-package-ir/v1"
+    assert metadata["target"] == {
+        "kind": "typescript",
+        "package_name": "todo-fixture-typescript",
+        "layout_version": "command-generation/typescript-target-layout/v1",
+    }
 
 
 def test_typescript_cli_append_option_accumulates_repeated_values(tmp_path: Path) -> None:

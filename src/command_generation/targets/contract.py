@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,55 @@ from command_generation.primitive_registry import BUILTIN_PORTABLE_PRIMITIVES, P
 class GeneratedOutput:
     path: Path
     content: str
+
+
+GENERATED_ARTIFACT_METADATA_VERSION = "command-generation/generated-artifact-metadata/v1"
+
+
+def command_generation_version() -> str:
+    try:
+        return version("command-generation")
+    except PackageNotFoundError:
+        return "0+unknown"
+
+
+def generated_artifact_metadata(
+    *,
+    manifest_schema_version: str,
+    target: dict[str, Any],
+    target_layout_version: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": GENERATED_ARTIFACT_METADATA_VERSION,
+        "generator": {
+            "package": "command-generation",
+            "version": command_generation_version(),
+        },
+        "source_ir": {
+            "schema_version": manifest_schema_version,
+        },
+        "target": {
+            "kind": str(target.get("kind", "")),
+            "package_name": str(target.get("package_name", "")),
+            "layout_version": target_layout_version,
+        },
+    }
+
+
+def package_resource_with_generation_metadata(
+    package: dict[str, Any],
+    *,
+    manifest_schema_version: str,
+    target: dict[str, Any],
+    target_layout_version: str,
+) -> dict[str, Any]:
+    resource = dict(package)
+    resource["generation_metadata"] = generated_artifact_metadata(
+        manifest_schema_version=manifest_schema_version,
+        target=target,
+        target_layout_version=target_layout_version,
+    )
+    return resource
 
 
 def _json_block(payload: object) -> str:
@@ -234,4 +284,3 @@ def _operation_ir_primitive_steps(operation: dict[str, Any]) -> list[dict[str, A
         return []
     fragments = operation_fragments(operation, error_type=ValueError)
     return expand_operation_steps(steps, fragments=fragments, error_type=ValueError)
-
