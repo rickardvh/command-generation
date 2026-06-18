@@ -13,6 +13,7 @@ from typing import cast
 
 import pytest
 
+import command_generation as command_generation_api
 from command_generation import (
     BUILTIN_PORTABLE_PRIMITIVES,
     canonical_command_artifacts,
@@ -323,6 +324,23 @@ def test_target_extension_schema_copies_match() -> None:
     source_schema = repo_root / "schemas" / "target_extension.schema.json"
 
     assert source_schema.read_bytes() == target_extension_schema_path().read_bytes()
+
+
+def test_public_api_exports_have_compatibility_classification() -> None:
+    classification = command_generation_api.PUBLIC_API_CLASSIFICATION
+    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(encoding="utf-8")
+
+    assert set(classification) == set(command_generation_api.__all__)
+    assert set(classification.values()) <= {"stable", "provisional"}
+    for symbol, status in classification.items():
+        assert f"| `{symbol}` | {status} |" in docs
+
+    assert classification["load_command_package_ir"] == "stable"
+    assert classification["render_outputs"] == "stable"
+    assert classification["generate_command_packages"] == "stable"
+    assert classification["run_cli_conformance_case"] == "stable"
+    assert classification["invoke_typescript_operation"] == "provisional"
+    assert classification["execute_primitive"] == "provisional"
 
 
 def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
