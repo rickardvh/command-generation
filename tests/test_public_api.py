@@ -41,8 +41,8 @@ from command_generation import (
     target_support_matrix_entries,
     validate_target_extension_contract,
 )
-from command_generation import generator
 from command_generation.target_extension import TargetExtensionContract, TargetExtensionContractError
+from command_generation.targets.python import _python_local_runtime_binding_module
 
 
 def _maturity_policy() -> dict[str, object]:
@@ -649,7 +649,7 @@ def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics(
     setattr(source_module, "runtime_value", first_value)
     sys.modules[source_module.__name__] = source_module
     try:
-        rendered = generator._python_local_runtime_binding_module(
+        rendered = _python_local_runtime_binding_module(
             {
                 "program": "demo-cli",
                 "python_runtime_binding": {
@@ -926,6 +926,21 @@ def test_generic_generator_source_has_no_aw_product_literals() -> None:
         "verification.",
     ]
     assert [token for token in forbidden if token in source] == []
+
+
+def test_generator_delegates_to_internal_target_renderers() -> None:
+    generator_source = (Path(__file__).resolve().parents[1] / "src" / "command_generation" / "generator.py").read_text(
+        encoding="utf-8"
+    )
+    python_target = importlib.import_module("command_generation.targets.python")
+    typescript_target = importlib.import_module("command_generation.targets.typescript")
+
+    assert callable(python_target.render_python_outputs)
+    assert callable(typescript_target.render_typescript_outputs)
+    assert "render_python_outputs" in generator_source
+    assert "render_typescript_outputs" in generator_source
+    assert "def _python_runtime_adapter_module" not in generator_source
+    assert "def _typescript_runtime_module" not in generator_source
 
 
 def test_payload_assemble_builds_declarative_package_file_list(tmp_path: Path) -> None:
