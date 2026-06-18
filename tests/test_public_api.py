@@ -293,6 +293,8 @@ def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
     assert schema["$id"] == "command-generation/command-package-ir.schema.json"
     assert schema["title"] == "Command Generation Command Package IR"
     assert schema["properties"]["schema_version"]["const"] == "command-generation/command-package-ir/v1"
+    assert schema["x-command-generation-doc-role"] == "contract-reference"
+    assert "x-agentic-workspace-doc-role" not in schema
     assert loaded["schema_version"] == "command-generation/command-package-ir/v1"
     assert loaded["packages"][0]["id"] == "todo-fixture"
 

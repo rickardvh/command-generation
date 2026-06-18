@@ -1485,6 +1485,6 @@
       "description": "Ordered non empty strings entries used by this contract."
     }
   },
-  "x-agentic-workspace-doc-role": "contract-reference"
+  "x-command-generation-doc-role": "contract-reference"
 }
 
