@@ -17,3 +17,5 @@ Required rows are projected from `TargetExtensionContract` by `required_target_p
 Direct function conformance uses operation-shaped input values and checks operation results or structured errors. CLI/process conformance owns argv parsing, stdout/stderr, and exit-code behavior.
 
 Hosts still own product-specific operation behavior. This package owns the reusable matrix shape, runners, freshness accounting, and primitive support checks.
+
+`current_target_proof_evidence_inventory()` records the package-owned evidence ids for the targets currently implemented in this repository. Matrix tests compare required rows against that inventory rather than embedding ad hoc evidence ids in assertions.

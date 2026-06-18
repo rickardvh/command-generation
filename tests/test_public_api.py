@@ -43,7 +43,11 @@ from command_generation import (
     target_support_matrix_entries,
     validate_target_extension_contract,
 )
-from command_generation.target_extension import TargetExtensionContract, TargetExtensionContractError
+from command_generation.target_extension import (
+    TargetExtensionContract,
+    TargetExtensionContractError,
+    current_target_proof_evidence_inventory,
+)
 from command_generation.targets.python import _python_local_runtime_binding_module
 
 
@@ -1224,21 +1228,8 @@ def test_target_extension_contract_validates_and_projects_matrix_entries() -> No
 
 def test_required_target_proof_matrix_requires_evidence_for_implemented_targets() -> None:
     required = required_target_proof_matrix_entries([_target_extension_contract(), _typescript_target_extension_contract()])
-    evidence_ids = {
-        "python:python.function:direct-operation-success",
-        "python:python.function:direct-operation-structured-error",
-        "python:python.function:cli-process-success",
-        "python:python.function:cli-process-parser-failure",
-        "python:python.function:generated-artifact-freshness",
-        "python:python.function:generated-runtime-boundary",
-        "python:python.function:unsupported-primitive-target",
-        "typescript:typescript.function:direct-operation-success",
-        "typescript:typescript.function:cli-process-success",
-        "typescript:typescript.function:cli-process-parser-failure",
-        "typescript:typescript.function:generated-artifact-freshness",
-        "typescript:typescript.function:generated-runtime-boundary",
-        "typescript:typescript.function:unsupported-primitive-target",
-    }
+    evidence_inventory = current_target_proof_evidence_inventory()
+    evidence_ids = {item["evidence_id"] for item in evidence_inventory}
 
     assert {entry["proof_kind"] for entry in required} == {
         "direct-operation-success",
@@ -1249,6 +1240,7 @@ def test_required_target_proof_matrix_requires_evidence_for_implemented_targets(
         "generated-runtime-boundary",
         "unsupported-primitive-target",
     }
+    assert all(item["source"].startswith("tests/test_public_api.py::test_") for item in evidence_inventory)
     assert missing_target_proof_matrix_entries(required, evidence_ids) == ()
 
 

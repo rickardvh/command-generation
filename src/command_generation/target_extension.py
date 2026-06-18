@@ -196,6 +196,72 @@ def missing_target_proof_matrix_entries(
     return tuple(dict(entry) for entry in required_entries if str(entry.get("evidence_id", "")) not in evidence)
 
 
+def current_target_proof_evidence_inventory() -> tuple[dict[str, str], ...]:
+    """Return package-owned evidence ids for currently implemented target proof rows."""
+
+    evidence = [
+        (
+            "python:python.function:direct-operation-success",
+            "tests/test_public_api.py::test_contract_owned_operation_case_runs_function_adapter",
+        ),
+        (
+            "python:python.function:direct-operation-structured-error",
+            "tests/test_public_api.py::test_contract_owned_operation_case_checks_expected_function_error",
+        ),
+        (
+            "python:python.function:cli-process-success",
+            "tests/test_public_api.py::test_contract_owned_conformance_case_runs_black_box_cli",
+        ),
+        (
+            "python:python.function:cli-process-parser-failure",
+            "tests/test_public_api.py::test_non_aw_fixture_python_cli_reports_parser_failure",
+        ),
+        (
+            "python:python.function:generated-artifact-freshness",
+            "tests/test_public_api.py::test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family",
+        ),
+        (
+            "python:python.function:generated-runtime-boundary",
+            "tests/test_public_api.py::test_generic_generator_source_has_no_aw_product_literals",
+        ),
+        (
+            "python:python.function:unsupported-primitive-target",
+            "tests/test_public_api.py::test_primitive_registry_rejects_unsupported_target",
+        ),
+        (
+            "typescript:typescript.function:direct-operation-success",
+            "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
+        ),
+        (
+            "typescript:typescript.function:cli-process-success",
+            "tests/test_public_api.py::test_typescript_cli_append_option_accumulates_repeated_values",
+        ),
+        (
+            "typescript:typescript.function:cli-process-parser-failure",
+            "tests/test_public_api.py::test_typescript_cli_append_option_requires_value",
+        ),
+        (
+            "typescript:typescript.function:generated-artifact-freshness",
+            "tests/test_public_api.py::test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family",
+        ),
+        (
+            "typescript:typescript.function:generated-runtime-boundary",
+            "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
+        ),
+        (
+            "typescript:typescript.function:unsupported-primitive-target",
+            "tests/test_public_api.py::test_primitive_registry_round_trips_host_metadata",
+        ),
+    ]
+    return tuple(
+        {
+            "evidence_id": evidence_id,
+            "source": source,
+        }
+        for evidence_id, source in evidence
+    )
+
+
 def _proof_entry(contract: TargetExtensionContract, proof_kind: str, *, adapter_id: str) -> dict[str, str]:
     return {
         "target_id": contract.target_id,
