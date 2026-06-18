@@ -80,6 +80,7 @@ Generated target resources are target-scoped. A TypeScript package resource carr
 - Keep target differences in thin adapters such as generated Python functions, generated TypeScript functions, CLI wrappers, or a future MCP adapter.
 - Prefer direct function adapters for operation semantics: JSON-shaped inputs should produce normalized result objects or structured errors without depending on argv, stdout, stderr, or shell process behavior.
 - Use CLI/process conformance for wrapper boundaries: parser behavior, text projection, exit codes, stderr policy, and fixture state.
+- Use the [target proof matrix](docs/target-proof-matrix.md) to keep implemented target support tied to direct operation, CLI/process, freshness, runtime-boundary, and primitive-support evidence.
 - Run the same contract case through the relevant adapter, then compare only the normalized fields that express the behavioral contract.
 - Add new one-off tests only for runner internals or target adapter mechanics; command behavior should be represented by contract cases first.
 
