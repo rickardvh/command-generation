@@ -118,7 +118,9 @@ def main() -> int:
             arguments={"fields": {"dry_run": True, "message": "Skills", "actions_from": "registry.skills", "mode": "skills"}},
             context=context,
         )
-        assert skill_payload["actions"] == [{"kind": "skill", "id": "review", "path": "review/SKILL.md"}]
+        assert skill_payload["actions"][0]["kind"] == "bundled skill"
+        assert skill_payload["actions"][0]["path"] == "review"
+        assert skill_payload["actions"][0]["source"] == "review"
 
         verify_payload = execute_primitive(
             "payload.verify",
@@ -148,7 +150,7 @@ def main() -> int:
             values={"result": skill_payload, "format": "json"},
             context=context,
         )
-        assert json.loads(emitted_json)["actions"][0]["id"] == "review"
+        assert json.loads(emitted_json)["actions"][0]["source"] == "review"
 
         emitted_text = execute_primitive(
             "output.emit",
@@ -215,7 +217,7 @@ def main() -> int:
             }
         }
         values = run_operation_steps(operation, initial_values={"format": "json"}, context=context)
-        assert json.loads(values["emitted"])["actions"][0]["id"] == "review"
+        assert json.loads(values["emitted"])["actions"][0]["source"] == "review"
 
         guarded_operation = {
             "ir_plan": {

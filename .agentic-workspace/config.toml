@@ -6,7 +6,10 @@
 schema_version = 1
 
 [workspace]
-default_preset = "full"
 agent_instructions_file = "AGENTS.md"
 workflow_artifact_profile = "repo-owned"
 cli_invoke = "uv run agentic-workspace"
+maintainer_mode = true
+
+[modules]
+enabled = ["planning", "memory", "verification"]
