@@ -7,6 +7,7 @@ from typing import Any
 from command_generation.host_manifest import CommandGenerationHostManifest
 from command_generation.targets.contract import (
     GeneratedOutput,
+    TYPESCRIPT_TARGET_LAYOUT_VERSION,
     _command_operation_refs,
     _is_runnable_typescript_target,
     _json_block,
@@ -139,7 +140,7 @@ def _typescript_package_json(
             "generationMetadata": generated_artifact_metadata(
                 manifest_schema_version=manifest_schema_version,
                 target=target,
-                target_layout_version="command-generation/typescript-target-layout/v1",
+                target_layout_version=TYPESCRIPT_TARGET_LAYOUT_VERSION,
             ),
             "effectiveRuntimeCommand": None,
             "source": source_path,
@@ -967,7 +968,7 @@ def _target_scoped_package_resource(package: dict[str, Any], target: dict[str, A
         package,
         manifest_schema_version=manifest_schema_version,
         target=target,
-        target_layout_version="command-generation/typescript-target-layout/v1",
+        target_layout_version=TYPESCRIPT_TARGET_LAYOUT_VERSION,
     )
     scoped["targets"] = [dict(target)]
     if target.get("kind") != "python":

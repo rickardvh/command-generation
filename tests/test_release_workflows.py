@@ -137,8 +137,11 @@ def test_release_asset_patterns_exclude_incidental_dist_files() -> None:
 
 def test_release_notes_classify_compatibility_significant_changes() -> None:
     release_config = (ROOT / ".github" / "release.yml").read_text(encoding="utf-8")
+    release_docs = (ROOT / "docs" / "release-and-versioning.md").read_text(encoding="utf-8")
 
     assert "Compatibility-significant changes" in release_config
     assert "schema" in release_config
     assert "generated-runtime" in release_config
     assert "conformance" in release_config
+    assert "target layout version" in release_docs
+    assert "target-layout-compatibility.md" in release_docs

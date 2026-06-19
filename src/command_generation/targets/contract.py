@@ -18,6 +18,8 @@ class GeneratedOutput:
 
 
 GENERATED_ARTIFACT_METADATA_VERSION = "command-generation/generated-artifact-metadata/v1"
+PYTHON_TARGET_LAYOUT_VERSION = "command-generation/python-target-layout/v1"
+TYPESCRIPT_TARGET_LAYOUT_VERSION = "command-generation/typescript-target-layout/v1"
 
 
 def command_generation_version() -> str:

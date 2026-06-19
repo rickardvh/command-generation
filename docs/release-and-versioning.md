@@ -26,7 +26,7 @@ Direct package-affecting pushes to `master` do not have PR labels to inspect. Th
 
 Semver releases may also be cut by pushing a `vMAJOR.MINOR.PATCH` tag manually when the tag matches `project.version`.
 
-Release notes are generated from merged PRs and classify compatibility-significant changes separately. PRs that change the command package IR schema, generated runtime layout, conformance semantics, target extension contract, or primitive behavior should use a compatibility label such as `schema`, `generated-runtime`, `conformance`, or `compatibility`.
+Release notes are generated from merged PRs and classify compatibility-significant changes separately. PRs that change the command package IR schema, generated runtime layout, target layout version, conformance semantics, target extension contract, or primitive behavior should use a compatibility label such as `schema`, `generated-runtime`, `conformance`, or `compatibility`.
 
 ## Compatibility Signals
 
@@ -36,6 +36,7 @@ Release notes should call out changes that affect consumers:
 
 - command package IR schema shape;
 - generated Python or TypeScript artifact layout;
+- generated target layout version changes;
 - generated artifact provenance metadata shape;
 - generated callable or CLI adapter contracts;
 - stable public API removals or signature changes;
@@ -44,6 +45,8 @@ Release notes should call out changes that affect consumers:
 - package-owned fixture case changes that consumers use as proof anchors.
 
 Internal refactors that do not change these surfaces can stay patch-level changes. While the package is pre-1.0, compatibility-significant changes should still be explicit in release notes so consumers can choose safe pin ranges.
+
+Generated target layout compatibility is defined in [Generated Target Layout Compatibility](target-layout-compatibility.md). A PR that changes `generation_metadata.target.layout_version` should explain the old and new layout identifiers and the generated paths, metadata placement, or runtime lookup expectations that required the bump.
 
 ## Runtime Boundary
 
