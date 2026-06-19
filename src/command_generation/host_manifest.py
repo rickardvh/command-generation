@@ -17,6 +17,7 @@ class CommandGenerationHostManifest:
     contract_roots: Mapping[str, Path] = field(default_factory=dict)
     primitive_registry: PrimitiveRegistry | None = None
     target_bindings: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    python_primitive_executor_path: Path | None = None
     typescript_runtime_support_path: Path | None = None
     operation_schema_version: str = "command-generation/operation/v1"
 
@@ -66,6 +67,7 @@ class CommandGenerationHostManifest:
             contract_roots=contract_roots,
             primitive_registry=registry,
             target_bindings=target_bindings,
+            python_primitive_executor_path=_path(raw.get("python_primitive_executor_path")),
             typescript_runtime_support_path=_path(raw.get("typescript_runtime_support_path")),
             operation_schema_version=str(raw.get("operation_schema_version") or "command-generation/operation/v1"),
         )

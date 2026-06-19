@@ -90,6 +90,7 @@ def render_outputs(
                         manifest_schema_version=manifest_schema_version,
                         source_path=source_path,
                         regenerate_command=regenerate_command,
+                        host_manifest=host,
                     )
                 )
             elif target["kind"] == "typescript":

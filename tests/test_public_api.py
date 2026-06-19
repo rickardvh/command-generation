@@ -1167,6 +1167,33 @@ def test_generated_targets_include_operation_fragment_support(tmp_path: Path) ->
     assert "def expand_operation_steps" in rendered["todo_cli_pkg/primitives/operation_composition.py"]
 
 
+def test_python_primitive_executor_can_come_from_host_manifest(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+    support_path = tmp_path / "contracts" / "python_primitive_executor.py"
+    support_path.write_text(
+        "from __future__ import annotations\n\n"
+        "HOST_SENTINEL = 'host-owned-primitive-executor'\n\n",
+        encoding="utf-8",
+    )
+
+    outputs = render_outputs(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        host_manifest={
+            "python_primitive_executor_path": "contracts/python_primitive_executor.py",
+            "generated_root": "generated",
+        },
+    )
+    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+
+    primitive_executor = rendered["todo_cli_pkg/primitives/primitive_executor.py"]
+    assert "Host primitive executor support: contracts/python_primitive_executor.py" in primitive_executor
+    assert "HOST_SENTINEL = 'host-owned-primitive-executor'" in primitive_executor
+    assert "Primitive behavior changes belong in the configured primitive executor support source." in primitive_executor
+
+
 def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics() -> None:
     source_module = types.ModuleType("fake_source_runtime_for_facade")
 
