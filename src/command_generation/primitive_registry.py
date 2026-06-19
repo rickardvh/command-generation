@@ -20,6 +20,7 @@ class PrimitiveDefinition:
     conformance_refs: tuple[str, ...] = ()
     unsupported_behavior: str = "fail"
     unsupported_targets: Mapping[str, str] = field(default_factory=dict)
+    transitional_retirement: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "PrimitiveDefinition":
@@ -41,6 +42,13 @@ class PrimitiveDefinition:
         raw_kind = str(raw.get("kind", "portable")).strip() or "portable"
         kind_aliases = {"host": "host-owned"}
         normalized_kind = kind_aliases.get(raw_kind, raw_kind)
+        transitional_retirement = object_field("transitional_retirement")
+        if normalized_kind == "transitional":
+            _validate_transitional_retirement(
+                primitive_id,
+                owner=str(raw.get("owner", "command-generation")),
+                retirement=transitional_retirement,
+            )
         return cls(
             id=primitive_id,
             kind=normalized_kind,
@@ -55,6 +63,7 @@ class PrimitiveDefinition:
             conformance_refs=tuple(normalized_refs),
             unsupported_behavior=str(raw.get("unsupported_behavior", "fail")),
             unsupported_targets={str(key): str(value) for key, value in object_field("unsupported_targets").items()},
+            transitional_retirement=transitional_retirement,
         )
 
     def support_for(self, target: str) -> str:
@@ -111,9 +120,27 @@ class PrimitiveRegistry:
                 "conformance_refs": list(definition.conformance_refs),
                 "unsupported_behavior": definition.unsupported_behavior,
                 "unsupported_targets": dict(definition.unsupported_targets),
+                "transitional_retirement": dict(definition.transitional_retirement),
             }
             for definition in sorted(self._definitions.values(), key=lambda item: item.id)
         ]
+
+
+def _validate_transitional_retirement(primitive_id: str, *, owner: str, retirement: Mapping[str, Any]) -> None:
+    if owner == "command-generation":
+        raise ValueError(f"transitional primitive {primitive_id!r} must declare the host or migration owner")
+    required = {
+        "target_end_state",
+        "rationale",
+        "migration_note",
+        "compatibility",
+        "coordination_issue",
+    }
+    missing = sorted(field for field in required if not str(retirement.get(field, "")).strip())
+    if missing:
+        raise ValueError(
+            f"transitional primitive {primitive_id!r} must declare transitional_retirement fields: {', '.join(missing)}"
+        )
 
 
 BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
@@ -130,6 +157,13 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "owner": "host",
             "description": "Legacy workspace-shaped root resolver retained for existing generated packages.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
+            "transitional_retirement": {
+                "target_end_state": "renamed/reshaped portable behavior",
+                "rationale": "Existing AW-shaped manifests use a workspace-named root resolver, but the generic behavior is target path resolution.",
+                "migration_note": "Migrate host manifests to path.target_root.resolve where repository-root semantics are not product-specific.",
+                "compatibility": "Retain until downstream generated packages no longer reference workspace.root.resolve.",
+                "coordination_issue": "https://github.com/rickardvh/command-generation/issues/44",
+            },
         },
         {
             "id": "filesystem.exists",
@@ -173,6 +207,13 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "owner": "host",
             "description": "Installed-payload status policy retained for existing AW-style package manifests.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
+            "transitional_retirement": {
+                "target_end_state": "host-owned registry behavior",
+                "rationale": "Installed-payload status rules are AW product policy, not generic command-generation payload assembly.",
+                "migration_note": "Move status policy into an AW-owned primitive registry/runtime implementation.",
+                "compatibility": "Retain until AW manifests have migrated and package release notes announce removal or replacement.",
+                "coordination_issue": "https://github.com/rickardvh/command-generation/issues/44",
+            },
         },
         {
             "id": "payload.lifecycle-plan",
@@ -180,6 +221,13 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "owner": "host",
             "description": "Installed-payload lifecycle policy retained for existing AW-style package manifests.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
+            "transitional_retirement": {
+                "target_end_state": "host-owned registry behavior",
+                "rationale": "Lifecycle-plan interpretation is AW package lifecycle policy rather than reusable payload mechanics.",
+                "migration_note": "Move lifecycle-plan construction into an AW-owned primitive registry/runtime implementation.",
+                "compatibility": "Retain until AW manifests have migrated and package release notes announce removal or replacement.",
+                "coordination_issue": "https://github.com/rickardvh/command-generation/issues/44",
+            },
         },
         {
             "id": "payload.current-memory",
@@ -187,6 +235,13 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "owner": "host",
             "description": "Current-memory payload policy retained for existing AW-style package manifests.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
+            "transitional_retirement": {
+                "target_end_state": "host-owned registry behavior",
+                "rationale": "Current-memory views are AW memory product policy, not a generic command-generation primitive.",
+                "migration_note": "Move current-memory selection and rendering into an AW-owned primitive registry/runtime implementation.",
+                "compatibility": "Retain until AW manifests have migrated and package release notes announce removal or replacement.",
+                "coordination_issue": "https://github.com/rickardvh/command-generation/issues/44",
+            },
         },
         {
             "id": "payload.verify",
@@ -194,6 +249,13 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "owner": "host",
             "description": "Installed-payload verification policy retained for existing AW-style package manifests.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
+            "transitional_retirement": {
+                "target_end_state": "host-owned registry behavior",
+                "rationale": "Installed-payload verification checks encode AW compatibility and package policy.",
+                "migration_note": "Move verification policy into an AW-owned primitive registry/runtime implementation.",
+                "compatibility": "Retain until AW manifests have migrated and package release notes announce removal or replacement.",
+                "coordination_issue": "https://github.com/rickardvh/command-generation/issues/44",
+            },
         },
         {
             "id": "output.emit",
@@ -207,6 +269,13 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "owner": "host",
             "description": "Installed-payload text projection retained for existing AW-style package manifests.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
+            "transitional_retirement": {
+                "target_end_state": "removed after downstream migration",
+                "rationale": "Install-result text projection is coupled to AW installed-payload output shape.",
+                "migration_note": "Migrate generic output to output.emit and AW-specific text to an AW-owned formatter primitive.",
+                "compatibility": "Retain until AW manifests have migrated and package release notes announce removal or replacement.",
+                "coordination_issue": "https://github.com/rickardvh/command-generation/issues/44",
+            },
         },
         {
             "id": "output.emit.current-memory",
@@ -214,6 +283,13 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "owner": "host",
             "description": "Current-memory text projection retained for existing AW-style package manifests.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
+            "transitional_retirement": {
+                "target_end_state": "removed after downstream migration",
+                "rationale": "Current-memory text projection is coupled to AW memory output shape.",
+                "migration_note": "Migrate generic output to output.emit and AW-specific text to an AW-owned formatter primitive.",
+                "compatibility": "Retain until AW manifests have migrated and package release notes announce removal or replacement.",
+                "coordination_issue": "https://github.com/rickardvh/command-generation/issues/44",
+            },
         },
         {
             "id": "python.function.call",

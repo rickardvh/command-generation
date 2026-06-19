@@ -1202,6 +1202,63 @@ def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
     assert all(item["description"] for item in definitions.values())
 
 
+def test_transitional_primitives_declare_retirement_policy() -> None:
+    definitions = {item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()}
+    transitional = {primitive_id: item for primitive_id, item in definitions.items() if item["kind"] == "transitional"}
+
+    assert set(transitional) == {
+        "workspace.root.resolve",
+        "payload.status",
+        "payload.lifecycle-plan",
+        "payload.current-memory",
+        "payload.verify",
+        "output.emit.install-result",
+        "output.emit.current-memory",
+    }
+    for primitive in transitional.values():
+        retirement = primitive["transitional_retirement"]
+        assert set(retirement) == {
+            "target_end_state",
+            "rationale",
+            "migration_note",
+            "compatibility",
+            "coordination_issue",
+        }
+        assert retirement["coordination_issue"] == "https://github.com/rickardvh/command-generation/issues/44"
+        assert retirement["target_end_state"] in {
+            "renamed/reshaped portable behavior",
+            "host-owned registry behavior",
+            "removed after downstream migration",
+            "retained with generic rationale",
+        }
+        assert "AW" in retirement["migration_note"] or "path.target_root.resolve" in retirement["migration_note"]
+
+
+def test_transitional_primitives_require_owner_and_retirement_metadata() -> None:
+    missing_retirement = {
+        "id": "fixture.transitional",
+        "kind": "transitional",
+        "owner": "host",
+        "description": "Fixture transitional primitive.",
+        "target_support": {"python": "implemented"},
+    }
+    missing_owner = {
+        **missing_retirement,
+        "transitional_retirement": {
+            "target_end_state": "host-owned registry behavior",
+            "rationale": "Fixture rationale.",
+            "migration_note": "Move to a fixture-owned primitive.",
+            "compatibility": "Retain until fixture migration completes.",
+            "coordination_issue": "https://github.com/example/repo/issues/1",
+        },
+    }
+
+    with pytest.raises(ValueError, match="transitional_retirement fields"):
+        PrimitiveRegistry.from_definitions([missing_retirement])
+    with pytest.raises(ValueError, match="must declare the host or migration owner"):
+        PrimitiveRegistry.from_definitions([{**missing_owner, "owner": "command-generation"}])
+
+
 def _target_extension_contract(**overrides: object) -> dict[str, object]:
     contract: dict[str, object] = {
         "schema_version": "command-generation/target-extension/v1",
