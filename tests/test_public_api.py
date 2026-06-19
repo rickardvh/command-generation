@@ -292,6 +292,105 @@ def _fixture_manifest_with_typescript_append_option(tmp_path: Path) -> dict[str,
     return manifest
 
 
+def _fixture_manifest_with_nested_cli_shapes(tmp_path: Path) -> dict[str, object]:
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    operation_ref = {"id": "todo.list.report", "path": "operations/todo.list.report.json"}
+    command["interface"] = {
+        "name": "list",
+        "help": "List todos.",
+        "subcommand_dest": "todo_scope",
+        "subcommands_required": True,
+        "subcommands": [
+            {
+                "name": "project",
+                "help": "List todos for a project.",
+                "arguments": [{"name": "project", "help": "Project name."}],
+                "options": [
+                    {
+                        "name": "format",
+                        "flags": ["--format"],
+                        "choices": ["text", "json"],
+                        "default": "json",
+                        "help": "Output format.",
+                    },
+                    {
+                        "name": "priority",
+                        "flags": ["--priority"],
+                        "choices": ["low", "high"],
+                        "required": True,
+                        "help": "Priority filter.",
+                    },
+                    {
+                        "name": "tags",
+                        "flags": ["--tag"],
+                        "action": "append",
+                        "help": "Tag filter.",
+                    },
+                ],
+                "operation_ref": operation_ref,
+            }
+        ],
+    }
+    operation_executor = cast(dict[str, object], cast(dict[str, object], package["python_runtime_binding"])["operation_executor"])
+    operation_executor["initial_values"] = [
+        {"name": "format", "arg": "format", "default": "json"},
+        {"name": "output_format", "arg": "format", "default": "json"},
+        {"name": "project", "arg": "project", "default": ""},
+        {"name": "priority", "arg": "priority", "default": ""},
+        {"name": "tags", "arg": "tags", "default": []},
+    ]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    assemble = cast(dict[str, object], cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])[2])
+    template = cast(dict[str, object], cast(dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"])["template"])
+    template["project"] = {"$value": "project"}
+    template["priority"] = {"$value": "priority"}
+    template["tags"] = {"$value": "tags"}
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    return manifest
+
+
+def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[str, object]:
+    manifest = _fixture_manifest(tmp_path)
+    (tmp_path / "todo_host_runtime.py").write_text(
+        "def decorate(result):\n"
+        "    enriched = dict(result)\n"
+        "    enriched['host_marker'] = 'decorated-by-host'\n"
+        "    return enriched\n",
+        encoding="utf-8",
+    )
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    runtime_binding = cast(dict[str, object], command["runtime_binding"])
+    runtime_binding["primitive_refs"] = [*cast(list[str], runtime_binding["primitive_refs"]), "todo.decorate"]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
+    steps.insert(
+        3,
+        {
+            "id": "decorate_result",
+            "uses": "todo.decorate",
+            "arguments": {},
+            "outputs": ["result"],
+        },
+    )
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    operation_executor = cast(dict[str, object], cast(dict[str, object], package["python_runtime_binding"])["operation_executor"])
+    operation_executor["handlers"] = [
+        {
+            "primitive": "todo.decorate",
+            "handler": "function_call",
+            "import_module": "todo_host_runtime",
+            "function": "decorate",
+            "kwargs": {"result": {"value": "result"}},
+        }
+    ]
+    return manifest
+
+
 def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
     manifest_path = tmp_path / "command_package_ir.json"
     manifest_path.write_text(json.dumps(_fixture_manifest(tmp_path)), encoding="utf-8")
@@ -318,6 +417,26 @@ def test_package_owned_schema_accepts_legacy_aw_schema_version_alias(tmp_path: P
 
     assert loaded["schema_version"] == "command-generation/command-package-ir/v1"
     assert loaded["packages"][0]["id"] == "todo-fixture"
+
+
+def test_loaded_legacy_schema_alias_renders_canonical_generation_metadata(tmp_path: Path) -> None:
+    manifest = _fixture_manifest(tmp_path)
+    manifest["schema_version"] = "agentic-workspace/command-package-ir/v1"
+    manifest_path = tmp_path / "command_package_ir.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    loaded = load_command_package_ir(manifest_path, command_package_schema_path())
+    outputs = render_outputs(
+        loaded,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+    )
+    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+
+    assert json.loads(rendered["todo_cli_pkg/command_package.json"])["generation_metadata"]["source_ir"] == {
+        "schema_version": "command-generation/command-package-ir/v1"
+    }
 
 
 def test_target_extension_schema_copies_match() -> None:
@@ -441,6 +560,111 @@ def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> Non
         "items": [{"title": "Write test"}, {"title": "Run test"}],
         "requested_format": "text",
     }
+
+
+def test_non_aw_fixture_python_cli_covers_nested_required_positional_and_append(tmp_path: Path) -> None:
+    manifest = _fixture_manifest_with_nested_cli_shapes(tmp_path)
+
+    stale = generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; sys.path.insert(0, sys.argv[1]); "
+                "from todo_cli_pkg.cli import main; "
+                "raise SystemExit(main(['list', 'project', 'alpha', '--priority', 'high', '--tag', 'docs', '--tag', 'tests', '--format', 'json']))"
+            ),
+            str(tmp_path),
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert stale == []
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["project"] == "alpha"
+    assert payload["priority"] == "high"
+    assert payload["tags"] == ["docs", "tests"]
+
+
+def test_non_aw_fixture_python_cli_validates_required_nested_option(tmp_path: Path) -> None:
+    generate_command_packages(
+        _fixture_manifest_with_nested_cli_shapes(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; sys.path.insert(0, sys.argv[1]); "
+                "from todo_cli_pkg.cli import main; "
+                "raise SystemExit(main(['list', 'project', 'alpha']))"
+            ),
+            str(tmp_path),
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--priority" in result.stderr
+
+
+def test_non_aw_fixture_python_host_owned_primitive_success_path(tmp_path: Path) -> None:
+    registry = PrimitiveRegistry.from_definitions(
+        [
+            {
+                "id": "todo.decorate",
+                "kind": "host-owned",
+                "description": "Fixture host-owned result decorator.",
+                "target_support": {"python": "host-implemented"},
+                "owner": "todo fixture",
+            }
+        ]
+    )
+
+    stale = generate_command_packages(
+        _fixture_manifest_with_host_owned_python_primitive(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+        host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); from todo_cli_pkg.cli import main; raise SystemExit(main(['list', '--format', 'json']))",
+            str(tmp_path),
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert stale == []
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["host_marker"] == "decorated-by-host"
 
 
 def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path) -> None:
@@ -597,6 +821,52 @@ def test_generated_target_layout_versions_are_declared_and_placed_in_metadata(tm
     assert typescript_package["agenticWorkspace"]["generationMetadata"] == typescript_resource["generation_metadata"]
 
 
+def test_non_aw_fixture_freshness_reports_python_and_typescript_targets(tmp_path: Path) -> None:
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+    outputs = render_outputs(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+    )
+
+    def family(path: Path) -> str | None:
+        relative = path.relative_to(tmp_path).as_posix()
+        if relative.startswith("todo_cli_pkg/"):
+            return "python"
+        if relative.startswith("todo_ts_pkg/"):
+            return "typescript"
+        return None
+
+    fresh = generated_output_freshness_report(
+        outputs,
+        repo_root=tmp_path,
+        required_target_families=("python", "typescript"),
+        target_family_for_path=family,
+    )
+    (tmp_path / "todo_ts_pkg" / "src" / "cli.mjs").write_text("// stale\n", encoding="utf-8")
+    stale = generated_output_freshness_report(
+        outputs,
+        repo_root=tmp_path,
+        required_target_families=("python", "typescript"),
+        target_family_for_path=family,
+    )
+
+    assert fresh["status"] == "fresh"
+    assert set(fresh["rendered_output_count_by_family"]) == {"python", "typescript"}
+    assert fresh["missing_target_families"] == []
+    assert stale["status"] == "stale-or-incomplete"
+    assert stale["stale_outputs_by_family"] == {"typescript": ["todo_ts_pkg/src/cli.mjs"]}
+
+
 def test_typescript_cli_append_option_accumulates_repeated_values(tmp_path: Path) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")
@@ -709,6 +979,70 @@ def test_typescript_cli_append_option_validates_choices(tmp_path: Path) -> None:
     )
     assert result.returncode == 2
     assert "--tag must be one of: alpha, beta" in result.stderr
+
+
+def test_non_aw_fixture_typescript_cli_covers_nested_required_positional_and_append(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+
+    stale = generate_command_packages(
+        _fixture_manifest_with_nested_cli_shapes(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+    result = subprocess.run(
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "project",
+            "alpha",
+            "--priority",
+            "high",
+            "--tag",
+            "docs",
+            "--tag",
+            "tests",
+            "--format",
+            "json",
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert stale == []
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["project"] == "alpha"
+    assert payload["priority"] == "high"
+    assert payload["tags"] == ["docs", "tests"]
+
+
+def test_non_aw_fixture_typescript_cli_validates_required_nested_option(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+
+    generate_command_packages(
+        _fixture_manifest_with_nested_cli_shapes(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+    result = subprocess.run(
+        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "project", "alpha"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "missing required option --priority" in result.stderr
 
 
 def test_generated_targets_include_operation_fragment_support(tmp_path: Path) -> None:
