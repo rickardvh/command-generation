@@ -355,10 +355,12 @@ def _fixture_manifest_with_nested_cli_shapes(tmp_path: Path) -> dict[str, object
 
 def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[str, object]:
     manifest = _fixture_manifest(tmp_path)
-    (tmp_path / "todo_host_runtime.py").write_text(
-        "def decorate(result):\n"
-        "    enriched = dict(result)\n"
-        "    enriched['host_marker'] = 'decorated-by-host'\n"
+    (tmp_path / "todo_host_primitive_support.py").write_text(
+        "def execute_host_primitive(primitive, *, values, arguments, context):\n"
+        "    if primitive != 'todo.decorate':\n"
+        "        raise RuntimeError(f'unsupported fixture primitive: {primitive}')\n"
+        "    enriched = dict(values['result'])\n"
+        "    enriched['host_marker'] = 'decorated-by-python-host'\n"
         "    return enriched\n",
         encoding="utf-8",
     )
@@ -379,21 +381,18 @@ def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[s
         },
     )
     operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
-    operation_executor = cast(dict[str, object], cast(dict[str, object], package["python_runtime_binding"])["operation_executor"])
-    operation_executor["handlers"] = [
-        {
-            "primitive": "todo.decorate",
-            "handler": "function_call",
-            "import_module": "todo_host_runtime",
-            "function": "decorate",
-            "kwargs": {"result": {"value": "result"}},
-        }
-    ]
     return manifest
 
 
 def _fixture_manifest_with_host_owned_typescript_primitive(tmp_path: Path) -> dict[str, object]:
     manifest = _fixture_manifest_with_typescript(tmp_path)
+    (tmp_path / "todoHostPrimitiveSupport.mjs").write_text(
+        "export function executeHostPrimitive(primitive, values) {\n"
+        "  if (primitive !== 'todo.decorate') throw new Error(`unsupported fixture primitive ${primitive}`);\n"
+        "  return { ...values.result, host_marker: 'decorated-by-ts-host' };\n"
+        "}\n",
+        encoding="utf-8",
+    )
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
     targets = cast(list[object], package["targets"])
     package["targets"] = [target for target in targets if cast(dict[str, object], target)["kind"] == "typescript"]
@@ -672,7 +671,10 @@ def test_non_aw_fixture_python_host_owned_primitive_success_path(tmp_path: Path)
         source_path="command_package_ir.json",
         regenerate_command="python generate.py",
         check=False,
-        host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+        host_manifest=CommandGenerationHostManifest(
+            primitive_registry=registry,
+            python_primitive_support_path=tmp_path / "todo_host_primitive_support.py",
+        ),
     )
     result = subprocess.run(
         [
@@ -689,7 +691,45 @@ def test_non_aw_fixture_python_host_owned_primitive_success_path(tmp_path: Path)
 
     assert stale == []
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)["host_marker"] == "decorated-by-host"
+    assert json.loads(result.stdout)["host_marker"] == "decorated-by-python-host"
+
+
+def test_non_aw_fixture_python_host_owned_primitive_requires_support_module(tmp_path: Path) -> None:
+    registry = PrimitiveRegistry.from_definitions(
+        [
+            {
+                "id": "todo.decorate",
+                "kind": "host-owned",
+                "description": "Fixture host-owned result decorator.",
+                "target_support": {"python": "host-implemented"},
+                "owner": "todo fixture",
+            }
+        ]
+    )
+
+    generate_command_packages(
+        _fixture_manifest_with_host_owned_python_primitive(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+        host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); from todo_cli_pkg.cli import main; raise SystemExit(main(['list', '--format', 'json']))",
+            str(tmp_path),
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "unsupported host primitive: 'todo.decorate'" in result.stderr
 
 
 def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path) -> None:
@@ -1027,14 +1067,13 @@ def test_non_aw_fixture_typescript_host_owned_primitive_success_path(tmp_path: P
         source_path="command_package_ir.json",
         regenerate_command="python generate.py",
         check=False,
-        host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+        host_manifest=CommandGenerationHostManifest(
+            primitive_registry=registry,
+            typescript_primitive_support_path=tmp_path / "todoHostPrimitiveSupport.mjs",
+        ),
     )
     runner = tmp_path / "run-ts-host-primitive.mjs"
     runner.write_text(
-        "globalThis.hostPrimitive = (primitive, values) => {\n"
-        "  if (primitive !== 'todo.decorate') throw new Error(`unexpected primitive ${primitive}`);\n"
-        "  return { ...values.result, host_marker: 'decorated-by-ts-host' };\n"
-        "};\n"
         "const runtime = await import('./todo_ts_pkg/src/runtime.mjs');\n"
         "const result = runtime.invokeGeneratedOperation({\n"
         "  operationId: 'todo.list.report',\n"
@@ -1167,12 +1206,14 @@ def test_generated_targets_include_operation_fragment_support(tmp_path: Path) ->
     assert "def expand_operation_steps" in rendered["todo_cli_pkg/primitives/operation_composition.py"]
 
 
-def test_python_primitive_executor_can_come_from_host_manifest(tmp_path: Path) -> None:
+def test_python_host_primitive_support_keeps_generated_executor_skeleton(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
-    support_path = tmp_path / "contracts" / "python_primitive_executor.py"
+    support_path = tmp_path / "contracts" / "python_host_primitive_support.py"
     support_path.write_text(
         "from __future__ import annotations\n\n"
-        "HOST_SENTINEL = 'host-owned-primitive-executor'\n\n",
+        "HOST_SENTINEL = 'host-owned-primitive-support'\n\n"
+        "def execute_host_primitive(primitive, *, values, arguments, context):\n"
+        "    raise RuntimeError(f'unsupported fixture primitive: {primitive}')\n",
         encoding="utf-8",
     )
 
@@ -1182,16 +1223,19 @@ def test_python_primitive_executor_can_come_from_host_manifest(tmp_path: Path) -
         source_path="command_package_ir.json",
         regenerate_command="python generate.py",
         host_manifest={
-            "python_primitive_executor_path": "contracts/python_primitive_executor.py",
+            "python_primitive_support_path": "contracts/python_host_primitive_support.py",
             "generated_root": "generated",
         },
     )
     rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
 
     primitive_executor = rendered["todo_cli_pkg/primitives/primitive_executor.py"]
-    assert "Host primitive executor support: contracts/python_primitive_executor.py" in primitive_executor
-    assert "HOST_SENTINEL = 'host-owned-primitive-executor'" in primitive_executor
-    assert "Primitive behavior changes belong in the configured primitive executor support source." in primitive_executor
+    support = rendered["todo_cli_pkg/primitives/host_primitive_support.py"]
+    assert "Host primitive support: contracts/python_host_primitive_support.py" in primitive_executor
+    assert "Portable primitive dispatch and executor structure belong to command-generation." in primitive_executor
+    assert "def execute_primitive(" in primitive_executor
+    assert "execute_primitive = " not in primitive_executor
+    assert "HOST_SENTINEL = 'host-owned-primitive-support'" in support
 
 
 def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics() -> None:

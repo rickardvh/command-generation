@@ -52,6 +52,8 @@ See [Transitional Primitive Retirement](docs/transitional-primitive-retirement.m
 
 See [Public API Classification](docs/public-api.md) for stable and provisional `command_generation.__all__` exports.
 
+Host-owned primitive support is intentionally narrower than target executor replacement. `command-generation` renders the Python primitive executor skeleton, TypeScript runtime shell, and built-in portable primitive dispatch. Hosts may provide `python_primitive_support_path` or `typescript_primitive_support_path` modules that export only domain-runtime primitive behavior through `execute_host_primitive(...)` or `executeHostPrimitive(...)`. Unsupported host/domain primitive IDs fail explicitly at registry validation or runtime dispatch, and generated runtimes remain self-contained after rendering.
+
 ## Command Package IR
 
 Host repositories provide command package manifests that describe commands, operation refs, target projections, runtime bindings, resource copies, maturity policy, and generated output locations. This package validates and renders those manifests, but the manifest remains host-owned.

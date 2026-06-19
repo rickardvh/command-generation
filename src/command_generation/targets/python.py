@@ -218,7 +218,7 @@ def _python_primitives_module(*, source_path: str, regenerate_command: str) -> s
     )
 
 
-def _host_python_primitive_executor_label(
+def _host_support_label(
     *,
     host_manifest: CommandGenerationHostManifest,
     support_path: Path,
@@ -239,23 +239,52 @@ def _python_primitive_executor_module(
     regenerate_command: str,
     host_manifest: CommandGenerationHostManifest,
 ) -> str:
-    primitive_executor_path = host_manifest.python_primitive_executor_path or Path(__file__).parent.parent / "primitive_executor.py"
+    primitive_executor_path = Path(__file__).parent.parent / "primitive_executor.py"
     primitive_executor = primitive_executor_path.read_text(encoding="utf-8")
-    support_label = (
-        _host_python_primitive_executor_label(host_manifest=host_manifest, support_path=primitive_executor_path)
-        if host_manifest.python_primitive_executor_path is not None
-        else "command_generation.primitive_executor"
-    )
+    support_label = "none"
+    support_import = ""
+    if host_manifest.python_primitive_support_path is not None:
+        support_label = _host_support_label(host_manifest=host_manifest, support_path=host_manifest.python_primitive_support_path)
+        support_import = (
+            "\n\n"
+            "from .host_primitive_support import execute_host_primitive as _execute_configured_host_primitive\n\n"
+            "execute_host_primitive = _execute_configured_host_primitive\n"
+        )
     return (
         '"""Generated target-local primitive executor implementation.\n\n'
         f"Source: {source_path}\n"
-        f"Host primitive executor support: {support_label}\n"
+        f"Host primitive support: {support_label}\n"
         f"Regenerate with: {regenerate_command}\n"
         '"""\n\n'
         "# DO NOT EDIT DIRECTLY.\n"
-        "# Primitive behavior changes belong in the configured primitive executor support source.\n"
+        "# Portable primitive dispatch and executor structure belong to command-generation.\n"
+        "# Host primitive behavior belongs in the configured support module.\n"
         f"# Regenerate with: {regenerate_command}\n\n"
         f"{primitive_executor}"
+        f"{support_import}"
+    )
+
+
+def _python_host_primitive_support_module(
+    *,
+    source_path: str,
+    regenerate_command: str,
+    host_manifest: CommandGenerationHostManifest,
+) -> str:
+    if host_manifest.python_primitive_support_path is None:
+        return ""
+    support_label = _host_support_label(host_manifest=host_manifest, support_path=host_manifest.python_primitive_support_path)
+    support = host_manifest.python_primitive_support_path.read_text(encoding="utf-8")
+    return (
+        '"""Generated target-local host primitive support module.\n\n'
+        f"Source: {source_path}\n"
+        f"Host primitive support: {support_label}\n"
+        f"Regenerate with: {regenerate_command}\n"
+        '"""\n\n'
+        "# DO NOT EDIT DIRECTLY.\n"
+        "# Domain-runtime primitive behavior belongs in the configured host support source.\n"
+        f"# Regenerate with: {regenerate_command}\n\n"
+        f"{support}"
     )
 
 
@@ -1504,6 +1533,17 @@ def render_python_outputs(
                     ),
                 )
             )
+            if host_manifest.python_primitive_support_path is not None:
+                outputs.append(
+                    GeneratedOutput(
+                        root / "primitives" / "host_primitive_support.py",
+                        _python_host_primitive_support_module(
+                            source_path=source_path,
+                            regenerate_command=regenerate_command,
+                            host_manifest=host_manifest,
+                        ),
+                    )
+                )
             outputs.append(
                 GeneratedOutput(
                     root / "primitives" / "operation_composition.py",

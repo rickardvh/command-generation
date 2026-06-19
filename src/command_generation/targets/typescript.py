@@ -312,14 +312,28 @@ def _typescript_runtime_module(
             "// DO NOT EDIT DIRECTLY.\n\n"
             + support
         )
+    support_import = ""
+    configured_host_primitive_call = ""
+    support_label = "none"
+    if host_manifest.typescript_primitive_support_path is not None:
+        support_label = _host_runtime_support_label(
+            host_manifest=host_manifest,
+            support_path=host_manifest.typescript_primitive_support_path,
+        )
+        support_import = "import { executeHostPrimitive as configuredHostPrimitive } from './hostPrimitiveSupport.mjs';\n"
+        configured_host_primitive_call = (
+            "  if (typeof configuredHostPrimitive === 'function') return configuredHostPrimitive(primitive, values, args, operationId);\n"
+        )
     return f"""// Generated native TypeScript operation runtime.
 // Source: {source_path}
+// Host primitive support: {support_label}
 // Regenerate with: {regenerate_command}
 // DO NOT EDIT DIRECTLY.
 
 import {{ existsSync, readFileSync, readdirSync, statSync, writeSync }} from 'node:fs';
 import {{ dirname, isAbsolute, join, relative, resolve }} from 'node:path';
 import {{ fileURLToPath }} from 'node:url';
+{support_import}
 
 const resourcesRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../resources');
 
@@ -493,6 +507,7 @@ function emitOutput(values) {{
 }}
 
 function executeHostPrimitive(primitive, values, args, operationId) {{
+{configured_host_primitive_call}  const hostPrimitive = globalThis.hostPrimitive;
   if (typeof hostPrimitive === 'function') return hostPrimitive(primitive, values, args, operationId);
   throw new RuntimeError(`unsupported native TypeScript primitive: ${{primitive}}`);
 }}
@@ -601,6 +616,29 @@ export function runGeneratedOperation({{ operationId, operationPath, values }}) 
   return 0;
 }}
 """
+
+
+def _typescript_host_primitive_support_module(
+    *,
+    source_path: str,
+    regenerate_command: str,
+    host_manifest: CommandGenerationHostManifest,
+) -> str:
+    if host_manifest.typescript_primitive_support_path is None:
+        return ""
+    support_label = _host_runtime_support_label(
+        host_manifest=host_manifest,
+        support_path=host_manifest.typescript_primitive_support_path,
+    )
+    support = host_manifest.typescript_primitive_support_path.read_text(encoding="utf-8")
+    return (
+        "// Generated target-local host primitive support module.\n"
+        f"// Source: {source_path}\n"
+        f"// Host primitive support: {support_label}\n"
+        f"// Regenerate with: {regenerate_command}\n"
+        "// DO NOT EDIT DIRECTLY.\n\n"
+        f"{support}"
+    )
 
 
 def _typescript_cli_module(
@@ -1029,6 +1067,17 @@ def render_typescript_outputs(
                 ),
             )
         )
+        if host_manifest.typescript_primitive_support_path is not None:
+            outputs.append(
+                GeneratedOutput(
+                    root / "src" / "hostPrimitiveSupport.mjs",
+                    _typescript_host_primitive_support_module(
+                        source_path=source_path,
+                        regenerate_command=regenerate_command,
+                        host_manifest=host_manifest,
+                    ),
+                )
+            )
         outputs.append(
             GeneratedOutput(
                 root / "src" / "cli.mjs",
