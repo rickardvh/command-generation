@@ -2,7 +2,7 @@
 
 Implemented generated targets must prove the generic surfaces they claim to own. Rendering files is not enough to mark a target implemented.
 
-Required rows are projected from `TargetExtensionContract` by `required_target_proof_matrix_entries(...)`:
+Required rows are projected from `TargetExtensionContract` by `required_target_proof_matrix_entries(...)`. Each row carries a stable `evidence_id` plus the proof `surface` so missing-evidence reports point at the target area that needs proof.
 
 | Proof kind | Applies when | Owner |
 | --- | --- | --- |
@@ -18,4 +18,10 @@ Direct function conformance uses operation-shaped input values and checks operat
 
 Hosts still own product-specific operation behavior. This package owns the reusable matrix shape, runners, freshness accounting, and primitive support checks.
 
-`current_target_proof_evidence_inventory()` records the package-owned evidence ids for the targets currently implemented in this repository. Matrix tests compare required rows against that inventory rather than embedding ad hoc evidence ids in assertions.
+`structured_target_proof_evidence_inventory()` records package-owned evidence for the targets currently implemented in this repository. Each evidence record declares:
+
+- `surface`: `function`, `process`, `freshness`, `runtime-boundary`, or `primitive-support`.
+- `evidence_type`: `conformance-case`, `ordinary-test`, `source-guard`, or `freshness-check`.
+- `source`: the contract case, test id, or helper that proves the row.
+
+`current_target_proof_evidence_inventory()` remains as the flat compatibility view of `evidence_id` and `source`. Matrix tests compare required rows against the structured inventory so new targets must declare evidence by surface and evidence type rather than adding anonymous test-name strings.

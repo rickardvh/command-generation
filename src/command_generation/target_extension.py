@@ -196,77 +196,149 @@ def missing_target_proof_matrix_entries(
     return tuple(dict(entry) for entry in required_entries if str(entry.get("evidence_id", "")) not in evidence)
 
 
+def structured_target_proof_evidence_inventory() -> tuple[dict[str, str], ...]:
+    """Return typed package-owned evidence records for currently implemented targets."""
+
+    return (
+        {
+            "evidence_id": "python:python.function:direct-operation-success",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "proof_kind": "direct-operation-success",
+            "surface": "function",
+            "evidence_type": "conformance-case",
+            "source": "tests/test_public_api.py::test_contract_owned_operation_case_runs_function_adapter",
+        },
+        {
+            "evidence_id": "python:python.function:direct-operation-structured-error",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "proof_kind": "direct-operation-structured-error",
+            "surface": "function",
+            "evidence_type": "conformance-case",
+            "source": "tests/test_public_api.py::test_contract_owned_operation_case_checks_expected_function_error",
+        },
+        {
+            "evidence_id": "python:python.function:cli-process-success",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "proof_kind": "cli-process-success",
+            "surface": "process",
+            "evidence_type": "conformance-case",
+            "source": "tests/test_public_api.py::test_contract_owned_conformance_case_runs_black_box_cli",
+        },
+        {
+            "evidence_id": "python:python.function:cli-process-parser-failure",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "proof_kind": "cli-process-parser-failure",
+            "surface": "process",
+            "evidence_type": "ordinary-test",
+            "source": "tests/test_public_api.py::test_non_aw_fixture_python_cli_reports_parser_failure",
+        },
+        {
+            "evidence_id": "python:python.function:generated-artifact-freshness",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "proof_kind": "generated-artifact-freshness",
+            "surface": "freshness",
+            "evidence_type": "freshness-check",
+            "source": "tests/test_public_api.py::test_non_aw_fixture_freshness_reports_python_and_typescript_targets",
+        },
+        {
+            "evidence_id": "python:python.function:generated-runtime-boundary",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "proof_kind": "generated-runtime-boundary",
+            "surface": "runtime-boundary",
+            "evidence_type": "source-guard",
+            "source": "tests/test_public_api.py::test_generic_generator_source_has_no_aw_product_literals",
+        },
+        {
+            "evidence_id": "python:python.function:unsupported-primitive-target",
+            "target_id": "python",
+            "adapter_id": "python.function",
+            "proof_kind": "unsupported-primitive-target",
+            "surface": "primitive-support",
+            "evidence_type": "ordinary-test",
+            "source": "tests/test_public_api.py::test_primitive_registry_rejects_unsupported_target",
+        },
+        {
+            "evidence_id": "typescript:typescript.function:direct-operation-success",
+            "target_id": "typescript",
+            "adapter_id": "typescript.function",
+            "proof_kind": "direct-operation-success",
+            "surface": "function",
+            "evidence_type": "conformance-case",
+            "source": "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
+        },
+        {
+            "evidence_id": "typescript:typescript.function:cli-process-success",
+            "target_id": "typescript",
+            "adapter_id": "typescript.function",
+            "proof_kind": "cli-process-success",
+            "surface": "process",
+            "evidence_type": "ordinary-test",
+            "source": "tests/test_public_api.py::test_non_aw_fixture_typescript_cli_covers_nested_required_positional_and_append",
+        },
+        {
+            "evidence_id": "typescript:typescript.function:cli-process-parser-failure",
+            "target_id": "typescript",
+            "adapter_id": "typescript.function",
+            "proof_kind": "cli-process-parser-failure",
+            "surface": "process",
+            "evidence_type": "ordinary-test",
+            "source": "tests/test_public_api.py::test_non_aw_fixture_typescript_cli_validates_required_nested_option",
+        },
+        {
+            "evidence_id": "typescript:typescript.function:generated-artifact-freshness",
+            "target_id": "typescript",
+            "adapter_id": "typescript.function",
+            "proof_kind": "generated-artifact-freshness",
+            "surface": "freshness",
+            "evidence_type": "freshness-check",
+            "source": "tests/test_public_api.py::test_non_aw_fixture_freshness_reports_python_and_typescript_targets",
+        },
+        {
+            "evidence_id": "typescript:typescript.function:generated-runtime-boundary",
+            "target_id": "typescript",
+            "adapter_id": "typescript.function",
+            "proof_kind": "generated-runtime-boundary",
+            "surface": "runtime-boundary",
+            "evidence_type": "ordinary-test",
+            "source": "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
+        },
+        {
+            "evidence_id": "typescript:typescript.function:unsupported-primitive-target",
+            "target_id": "typescript",
+            "adapter_id": "typescript.function",
+            "proof_kind": "unsupported-primitive-target",
+            "surface": "primitive-support",
+            "evidence_type": "ordinary-test",
+            "source": "tests/test_public_api.py::test_primitive_registry_round_trips_host_metadata",
+        },
+    )
+
+
 def current_target_proof_evidence_inventory() -> tuple[dict[str, str], ...]:
     """Return package-owned evidence ids for currently implemented target proof rows."""
 
-    evidence = [
-        (
-            "python:python.function:direct-operation-success",
-            "tests/test_public_api.py::test_contract_owned_operation_case_runs_function_adapter",
-        ),
-        (
-            "python:python.function:direct-operation-structured-error",
-            "tests/test_public_api.py::test_contract_owned_operation_case_checks_expected_function_error",
-        ),
-        (
-            "python:python.function:cli-process-success",
-            "tests/test_public_api.py::test_contract_owned_conformance_case_runs_black_box_cli",
-        ),
-        (
-            "python:python.function:cli-process-parser-failure",
-            "tests/test_public_api.py::test_non_aw_fixture_python_cli_reports_parser_failure",
-        ),
-        (
-            "python:python.function:generated-artifact-freshness",
-            "tests/test_public_api.py::test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family",
-        ),
-        (
-            "python:python.function:generated-runtime-boundary",
-            "tests/test_public_api.py::test_generic_generator_source_has_no_aw_product_literals",
-        ),
-        (
-            "python:python.function:unsupported-primitive-target",
-            "tests/test_public_api.py::test_primitive_registry_rejects_unsupported_target",
-        ),
-        (
-            "typescript:typescript.function:direct-operation-success",
-            "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
-        ),
-        (
-            "typescript:typescript.function:cli-process-success",
-            "tests/test_public_api.py::test_typescript_cli_append_option_accumulates_repeated_values",
-        ),
-        (
-            "typescript:typescript.function:cli-process-parser-failure",
-            "tests/test_public_api.py::test_typescript_cli_append_option_requires_value",
-        ),
-        (
-            "typescript:typescript.function:generated-artifact-freshness",
-            "tests/test_public_api.py::test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family",
-        ),
-        (
-            "typescript:typescript.function:generated-runtime-boundary",
-            "tests/test_public_api.py::test_contract_owned_operation_case_runs_typescript_function_adapter",
-        ),
-        (
-            "typescript:typescript.function:unsupported-primitive-target",
-            "tests/test_public_api.py::test_primitive_registry_round_trips_host_metadata",
-        ),
-    ]
     return tuple(
         {
-            "evidence_id": evidence_id,
-            "source": source,
+            "evidence_id": evidence["evidence_id"],
+            "source": evidence["source"],
         }
-        for evidence_id, source in evidence
+        for evidence in structured_target_proof_evidence_inventory()
     )
 
 
 def _proof_entry(contract: TargetExtensionContract, proof_kind: str, *, adapter_id: str) -> dict[str, str]:
+    proof_kind_detail = next(item for item in REQUIRED_TARGET_PROOF_KINDS if item["proof_kind"] == proof_kind)
     return {
         "target_id": contract.target_id,
         "adapter_id": adapter_id,
         "proof_kind": proof_kind,
+        "surface": proof_kind_detail["surface"],
         "evidence_id": f"{contract.target_id}:{adapter_id}:{proof_kind}",
         "source": "required target proof matrix",
     }
