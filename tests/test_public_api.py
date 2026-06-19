@@ -50,6 +50,7 @@ from command_generation.target_extension import (
     TargetExtensionContractError,
     current_target_proof_evidence_inventory,
 )
+from command_generation.targets.contract import PYTHON_TARGET_LAYOUT_VERSION, TYPESCRIPT_TARGET_LAYOUT_VERSION
 from command_generation.targets.python import _python_local_runtime_binding_module
 
 
@@ -575,6 +576,25 @@ def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) ->
         "package_name": "todo-fixture-typescript",
         "layout_version": "command-generation/typescript-target-layout/v1",
     }
+
+
+def test_generated_target_layout_versions_are_declared_and_placed_in_metadata(tmp_path: Path) -> None:
+    outputs = render_outputs(
+        _fixture_manifest_with_typescript(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+    )
+    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+    python_resource = json.loads(rendered["todo_cli_pkg/command_package.json"])
+    typescript_resource = json.loads(rendered["todo_ts_pkg/resources/command_package.json"])
+    typescript_package = json.loads(rendered["todo_ts_pkg/package.json"])
+
+    assert PYTHON_TARGET_LAYOUT_VERSION == "command-generation/python-target-layout/v1"
+    assert TYPESCRIPT_TARGET_LAYOUT_VERSION == "command-generation/typescript-target-layout/v1"
+    assert python_resource["generation_metadata"]["target"]["layout_version"] == PYTHON_TARGET_LAYOUT_VERSION
+    assert typescript_resource["generation_metadata"]["target"]["layout_version"] == TYPESCRIPT_TARGET_LAYOUT_VERSION
+    assert typescript_package["agenticWorkspace"]["generationMetadata"] == typescript_resource["generation_metadata"]
 
 
 def test_typescript_cli_append_option_accumulates_repeated_values(tmp_path: Path) -> None:

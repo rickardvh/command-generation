@@ -6,6 +6,7 @@ from typing import Any
 
 from command_generation.targets.contract import (
     GeneratedOutput,
+    PYTHON_TARGET_LAYOUT_VERSION,
     _command_module_import_for_binding,
     _command_operation_refs,
     _json_block,
@@ -1425,7 +1426,7 @@ def render_python_outputs(
                     package,
                     manifest_schema_version=manifest_schema_version,
                     target=target,
-                    target_layout_version="command-generation/python-target-layout/v1",
+                    target_layout_version=PYTHON_TARGET_LAYOUT_VERSION,
                 )
             )
             + "\n",

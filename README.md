@@ -80,6 +80,8 @@ Generated package resources carry `generation_metadata` with the `command-genera
 
 `render_outputs(...)` records the manifest schema version it is given. Hosts that need canonical provenance should load manifests through `load_command_package_ir(...)` first so legacy schema aliases are normalized before rendering.
 
+See [Generated Target Layout Compatibility](docs/target-layout-compatibility.md) for the meaning of target layout versions and when they must change.
+
 ## Conformance Strategy
 
 - Store behavior examples in host-owned contract resources as stable input/expected-output cases.
