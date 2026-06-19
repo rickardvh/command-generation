@@ -392,6 +392,30 @@ def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[s
     return manifest
 
 
+def _fixture_manifest_with_host_owned_typescript_primitive(tmp_path: Path) -> dict[str, object]:
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    targets = cast(list[object], package["targets"])
+    package["targets"] = [target for target in targets if cast(dict[str, object], target)["kind"] == "typescript"]
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    runtime_binding = cast(dict[str, object], command["runtime_binding"])
+    runtime_binding["primitive_refs"] = [*cast(list[str], runtime_binding["primitive_refs"]), "todo.decorate"]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
+    steps.insert(
+        3,
+        {
+            "id": "decorate_result",
+            "uses": "todo.decorate",
+            "arguments": {},
+            "outputs": ["result"],
+        },
+    )
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    return manifest
+
+
 def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
     manifest_path = tmp_path / "command_package_ir.json"
     manifest_path.write_text(json.dumps(_fixture_manifest(tmp_path)), encoding="utf-8")
@@ -980,6 +1004,81 @@ def test_typescript_cli_append_option_validates_choices(tmp_path: Path) -> None:
     )
     assert result.returncode == 2
     assert "--tag must be one of: alpha, beta" in result.stderr
+
+
+def test_non_aw_fixture_typescript_host_owned_primitive_success_path(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript host-owned primitive execution")
+    registry = PrimitiveRegistry.from_definitions(
+        [
+            {
+                "id": "todo.decorate",
+                "kind": "host-owned",
+                "description": "Fixture host-owned TypeScript result decorator.",
+                "target_support": {"typescript": "host-implemented"},
+                "owner": "todo fixture",
+            }
+        ]
+    )
+
+    stale = generate_command_packages(
+        _fixture_manifest_with_host_owned_typescript_primitive(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+        host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+    )
+    runner = tmp_path / "run-ts-host-primitive.mjs"
+    runner.write_text(
+        "globalThis.hostPrimitive = (primitive, values) => {\n"
+        "  if (primitive !== 'todo.decorate') throw new Error(`unexpected primitive ${primitive}`);\n"
+        "  return { ...values.result, host_marker: 'decorated-by-ts-host' };\n"
+        "};\n"
+        "const runtime = await import('./todo_ts_pkg/src/runtime.mjs');\n"
+        "const result = runtime.invokeGeneratedOperation({\n"
+        "  operationId: 'todo.list.report',\n"
+        "  operationPath: 'operations/todo.list.report.json',\n"
+        "  values: { format: 'json', output_format: 'json' },\n"
+        "});\n"
+        "console.log(JSON.stringify(result));\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["node", str(runner)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert stale == []
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["host_marker"] == "decorated-by-ts-host"
+
+
+def test_non_aw_fixture_typescript_host_owned_primitive_requires_target_support(tmp_path: Path) -> None:
+    registry = PrimitiveRegistry.from_definitions(
+        [
+            {
+                "id": "todo.decorate",
+                "kind": "host-owned",
+                "description": "Fixture host-owned TypeScript result decorator.",
+                "target_support": {"typescript": "unsupported"},
+                "unsupported_targets": {"typescript": "fixture host primitive is intentionally missing"},
+                "owner": "todo fixture",
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="fixture host primitive is intentionally missing"):
+        render_outputs(
+            _fixture_manifest_with_host_owned_typescript_primitive(tmp_path),
+            repo_root=tmp_path,
+            source_path="command_package_ir.json",
+            regenerate_command="python generate.py",
+            host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
+        )
 
 
 def test_non_aw_fixture_typescript_cli_covers_nested_required_positional_and_append(tmp_path: Path) -> None:
