@@ -34,6 +34,8 @@ Built-in primitive definitions carry a `kind` classification:
 
 The exported `BUILTIN_PORTABLE_PRIMITIVES` name is retained for API compatibility. Consumers should inspect each `PrimitiveDefinition.kind` instead of assuming every entry is package-owned portable behavior.
 
+See [Transitional Primitive Retirement](docs/transitional-primitive-retirement.md) for the current transitional inventory, required retirement metadata, and migration sequencing.
+
 ## Public API
 
 - `load_command_package_ir(path, schema_path=None)` validates IR against the package-owned schema.
