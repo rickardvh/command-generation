@@ -49,6 +49,7 @@ from command_generation.target_extension import (
     TargetExtensionContract,
     TargetExtensionContractError,
     current_target_proof_evidence_inventory,
+    structured_target_proof_evidence_inventory,
 )
 from command_generation.targets.contract import PYTHON_TARGET_LAYOUT_VERSION, TYPESCRIPT_TARGET_LAYOUT_VERSION
 from command_generation.targets.python import _python_local_runtime_binding_module
@@ -1690,8 +1691,36 @@ def test_required_target_proof_matrix_requires_evidence_for_implemented_targets(
         "generated-runtime-boundary",
         "unsupported-primitive-target",
     }
+    assert {entry["surface"] for entry in required} == {
+        "function",
+        "process",
+        "freshness",
+        "runtime-boundary",
+        "primitive-support",
+    }
     assert all(item["source"].startswith("tests/test_public_api.py::test_") for item in evidence_inventory)
     assert missing_target_proof_matrix_entries(required, evidence_ids) == ()
+
+
+def test_structured_target_proof_evidence_inventory_types_current_evidence() -> None:
+    required = required_target_proof_matrix_entries([_target_extension_contract(), _typescript_target_extension_contract()])
+    required_by_id = {entry["evidence_id"]: entry for entry in required}
+    structured = structured_target_proof_evidence_inventory()
+    flat = current_target_proof_evidence_inventory()
+
+    assert {item["evidence_id"] for item in structured} == set(required_by_id)
+    assert flat == tuple({"evidence_id": item["evidence_id"], "source": item["source"]} for item in structured)
+    assert {item["evidence_type"] for item in structured} == {
+        "conformance-case",
+        "ordinary-test",
+        "source-guard",
+        "freshness-check",
+    }
+    for item in structured:
+        assert item["surface"] == required_by_id[item["evidence_id"]]["surface"]
+        assert item["target_id"] == required_by_id[item["evidence_id"]]["target_id"]
+        assert item["adapter_id"] == required_by_id[item["evidence_id"]]["adapter_id"]
+        assert item["proof_kind"] == required_by_id[item["evidence_id"]]["proof_kind"]
 
 
 def test_required_target_proof_matrix_reports_missing_evidence() -> None:
@@ -1707,6 +1736,8 @@ def test_required_target_proof_matrix_reports_missing_evidence() -> None:
         "generated-runtime-boundary",
         "unsupported-primitive-target",
     }
+    assert all(entry["surface"] for entry in missing)
+    assert missing[0]["evidence_id"].startswith("python:python.function:")
 
 
 def test_target_extension_support_matrix_waits_for_implemented_target() -> None:
