@@ -4,7 +4,7 @@ import importlib
 import json
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -512,6 +512,8 @@ def _emit_output(
 def _plain_output_result(result: Any) -> Any:
     if isinstance(result, Path):
         return str(result)
+    if is_dataclass(result) and not isinstance(result, type):
+        return _plain_output_result(asdict(result))
     if isinstance(result, Mapping):
         return {str(key): _plain_output_result(value) for key, value in result.items()}
     if isinstance(result, Sequence) and not isinstance(result, (str, bytes, bytearray)):
