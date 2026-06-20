@@ -48,6 +48,8 @@ Internal refactors that do not change these surfaces can stay patch-level change
 
 Generated target layout compatibility is defined in [Generated Target Layout Compatibility](target-layout-compatibility.md). A PR that changes `generation_metadata.target.layout_version` should explain the old and new layout identifiers and the generated paths, metadata placement, or runtime lookup expectations that required the bump.
 
+Stable public API compatibility is audited in [Public API Classification](public-api.md). A PR that removes, renames, changes the signature of, or changes the documented semantics of a stable export should explain the compatibility impact in release notes and carry the semver label that matches that impact.
+
 ## Runtime Boundary
 
 Generated runtimes must not import `command_generation`. They may contain rendered code, copied resources, and operation contracts emitted by this package, but runtime behavior should depend on the generated package and host-owned runtime modules.

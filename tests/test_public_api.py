@@ -487,6 +487,51 @@ def test_public_api_exports_have_compatibility_classification() -> None:
     assert classification["execute_primitive"] == "provisional"
 
 
+def test_stable_public_api_exports_are_audited_with_contracts() -> None:
+    classification = command_generation_api.PUBLIC_API_CLASSIFICATION
+    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(encoding="utf-8")
+    audit = docs.split("## Stable API Audit", 1)[1].split("## Host Manifest And Primitive Support", 1)[0]
+
+    assert "Host-facing purpose" in audit
+    assert "Stable contract" in audit
+    assert "Compatibility rationale" in audit
+    for symbol, status in classification.items():
+        if status == "stable":
+            assert f"`{symbol}`" in audit
+
+
+def test_public_api_audit_captures_post_separation_host_shape() -> None:
+    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(encoding="utf-8")
+
+    assert "`python_primitive_support_path`" in docs
+    assert "`typescript_primitive_support_path`" in docs
+    assert "python_primitive_executor_path" not in docs
+    assert "typescript_runtime_support_path" not in docs
+
+    assert "`ordinary_usage_gate`" in docs
+    assert "`package_action_after_migration`" in docs
+    assert "`compatibility_fixture_policy`" in docs
+    assert "`downstream-ordinary-path-migration`" in docs
+    assert "`downstream-ordinary-usage-proof`" in docs
+
+    assert "`run_cli_conformance_case`" in docs
+    assert "`run_function_conformance_case`" in docs
+    assert "`TypescriptFunctionConformanceTarget`" in docs
+    assert "remain provisional" in docs
+
+    assert "`generated_output_freshness_report`" in docs
+    assert "`generation_metadata.target.layout_version`" in docs
+    assert "`PYTHON_TARGET_LAYOUT_VERSION`" in docs
+    assert "`TYPESCRIPT_TARGET_LAYOUT_VERSION`" in docs
+    assert "not encouraged or documented as stable public API" in docs
+
+
+def test_stable_public_api_entry_points_are_importable() -> None:
+    for symbol, status in command_generation_api.PUBLIC_API_CLASSIFICATION.items():
+        if status == "stable":
+            assert getattr(command_generation_api, symbol) is not None
+
+
 def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     manifest = _fixture_manifest(tmp_path)
 
