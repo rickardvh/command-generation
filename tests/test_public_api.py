@@ -1739,8 +1739,13 @@ def test_transitional_primitives_declare_retirement_policy() -> None:
             "migration_note",
             "compatibility",
             "coordination_issue",
+            "inventory_issue",
+            "ordinary_usage_gate",
+            "package_action_after_migration",
+            "compatibility_fixture_policy",
         }
-        assert retirement["coordination_issue"] == "https://github.com/rickardvh/command-generation/issues/44"
+        assert retirement["coordination_issue"] == "https://github.com/rickardvh/agentic-workspace/issues/1638"
+        assert retirement["inventory_issue"] == "https://github.com/rickardvh/agentic-workspace/issues/1639"
         assert retirement["target_end_state"] in {
             "renamed/reshaped portable behavior",
             "host-owned registry behavior",
@@ -1748,6 +1753,10 @@ def test_transitional_primitives_declare_retirement_policy() -> None:
             "retained with generic rationale",
         }
         assert "AW" in retirement["migration_note"] or "path.target_root.resolve" in retirement["migration_note"]
+        assert str(primitive["id"]) in retirement["ordinary_usage_gate"]
+        assert "zero ordinary source-operation usage" in retirement["ordinary_usage_gate"]
+        assert "compatibility-only/deprecated" in retirement["package_action_after_migration"]
+        assert "compatibility-test-only" in retirement["compatibility_fixture_policy"]
 
 
 def test_transitional_primitives_require_owner_and_retirement_metadata() -> None:
@@ -1766,6 +1775,10 @@ def test_transitional_primitives_require_owner_and_retirement_metadata() -> None
             "migration_note": "Move to a fixture-owned primitive.",
             "compatibility": "Retain until fixture migration completes.",
             "coordination_issue": "https://github.com/example/repo/issues/1",
+            "inventory_issue": "https://github.com/example/repo/issues/2",
+            "ordinary_usage_gate": "Do not remove while ordinary usage remains.",
+            "package_action_after_migration": "Deprecate after migration.",
+            "compatibility_fixture_policy": "Compatibility fixtures must be isolated.",
         },
     }
 
