@@ -30,11 +30,8 @@ Built-in primitive definitions carry a `kind` classification:
 
 - `portable`: package-owned generic dataflow, filesystem, parsing, payload assembly, or output mechanics.
 - `host-owned`: host-provided runtime bridges such as Python callable or TypeScript domain execution hooks.
-- `transitional`: product-shaped installed-payload or current-memory helpers retained for compatibility with existing generated packages while hosts move those semantics behind host-owned registries.
 
-The exported `BUILTIN_PORTABLE_PRIMITIVES` name is retained for API compatibility. Consumers should inspect each `PrimitiveDefinition.kind` instead of assuming every entry is package-owned portable behavior.
-
-See [Transitional Primitive Retirement](docs/transitional-primitive-retirement.md) for the current transitional inventory, required retirement metadata, and migration sequencing.
+The exported `BUILTIN_PORTABLE_PRIMITIVES` registry contains package-owned portable primitives plus the explicit host-owned bridge IDs that generated runtimes may call when the host supplies support modules. It does not carry product-shaped transitional compatibility primitives.
 
 ## Public API
 
@@ -46,11 +43,11 @@ See [Transitional Primitive Retirement](docs/transitional-primitive-retirement.m
 - `PrimitiveRegistry` and `PrimitiveDefinition` describe portable or host-owned primitives with target support.
 - `TargetExtensionContract`, `validate_target_extension_contract(...)`, and `target_support_matrix_entries(...)` define how new generated targets declare projection rules, runtime dependencies, callable/wrapper shape, packaging, conformance execution, and matrix support without owning product semantics.
 - `process_case_from_contract(...)`, `CliConformanceTarget`, and `run_cli_conformance_case(...)` provide the generic black-box runner for contract-owned CLI/process conformance cases.
-- `operation_case_from_contract(...)`, `FunctionConformanceTarget`, `TypescriptFunctionConformanceTarget`, `run_function_conformance_case(...)`, and `run_typescript_function_conformance_case(...)` provide the generic JSON-shaped operation conformance runner for direct implementation adapters without CLI argv semantics.
+- `operation_case_from_contract(...)`, `FunctionConformanceTarget`, and `run_function_conformance_case(...)` provide the generic JSON-shaped operation conformance runner for direct Python implementation adapters without CLI argv semantics.
 - `contract_conformance_cases_manifest()` and `load_contract_conformance_case(...)` expose package-owned reusable conformance cases.
 - `conformance_ownership_inventory()` reports the shared conformance surfaces owned here and the consumer-owned surfaces that should stay out of this package.
 
-See [Public API Classification](docs/public-api.md) for stable and provisional `command_generation.__all__` exports.
+See [Public API Classification](docs/public-api.md) for the stable `command_generation.__all__` export set.
 
 Host-owned primitive support is intentionally narrower than target executor replacement. `command-generation` renders the Python primitive executor skeleton, TypeScript runtime shell, and built-in portable primitive dispatch. Hosts may provide `python_primitive_support_path` or `typescript_primitive_support_path` modules that export only domain-runtime primitive behavior through `execute_host_primitive(...)` or `executeHostPrimitive(...)`; hosts do not replace the generated target shell. Unsupported host/domain primitive IDs fail explicitly at registry validation or runtime dispatch, and generated runtimes remain self-contained after rendering.
 

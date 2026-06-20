@@ -37,6 +37,17 @@ def test_ci_builds_and_proves_install_from_package_artifact() -> None:
     assert "actions/upload-artifact" in workflow
 
 
+def test_aw_artifact_consumption_proof_is_repeatable() -> None:
+    script = (ROOT / "scripts" / "prove_aw_artifact_consumption.py").read_text(encoding="utf-8")
+
+    assert "command-generation source tree" in script
+    assert "scripts/generate/generate_command_packages.py" in script
+    assert "scripts/check/check_generated_command_packages.py" in script
+    assert "--aw-primitive-ownership" in script
+    assert "scripts/check/run_operation_conformance_tests.py" in script
+    assert "source_tree_import" in script
+
+
 def test_pr_semver_label_workflow_requires_label_for_package_changes() -> None:
     workflow = (WORKFLOW_ROOT / "pr-semver-label.yml").read_text(encoding="utf-8")
 
@@ -67,6 +78,9 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert 'os.environ["GITHUB_ACTOR"] == "github-actions[bot]"' in workflow
     assert "Merge pull request #(\\d+)" in workflow
     assert "Direct push changed pyproject.toml; releasing explicit version" in workflow
+    assert "MAJOR.MINOR.PATCHrcN" in workflow
+    assert "declares prerelease version" in workflow
+    assert "releasing it without another bump" in workflow
     assert "Package-affecting direct push did not change pyproject.toml" in workflow
     assert 'output("release_needed", "false")' in workflow
     assert "set_release_outputs(current_version)" in workflow
@@ -90,6 +104,7 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert 'git push origin "${{ steps.release-bump.outputs.tag }}"' in workflow
     assert "softprops/action-gh-release" in workflow
     assert "tag_name: ${{ steps.release-bump.outputs.tag }}" in workflow
+    assert "prerelease: ${{ contains(steps.release-bump.outputs.version, 'rc') }}" in workflow
     assert "dist/*.whl" in workflow
     assert "dist/*.tar.gz" in workflow
     assert "dist/SHA256SUMS" in workflow
@@ -138,6 +153,7 @@ def test_release_asset_patterns_exclude_incidental_dist_files() -> None:
 def test_release_notes_classify_compatibility_significant_changes() -> None:
     release_config = (ROOT / ".github" / "release.yml").read_text(encoding="utf-8")
     release_docs = (ROOT / "docs" / "release-and-versioning.md").read_text(encoding="utf-8")
+    rc_notes = (ROOT / "docs" / "release-notes-1.0.0rc1.md").read_text(encoding="utf-8")
 
     assert "Compatibility-significant changes" in release_config
     assert "schema" in release_config
@@ -145,3 +161,7 @@ def test_release_notes_classify_compatibility_significant_changes() -> None:
     assert "conformance" in release_config
     assert "target layout version" in release_docs
     assert "target-layout-compatibility.md" in release_docs
+    assert "Stable Public API Boundary" in rc_notes
+    assert "Generated Runtime Boundary" in rc_notes
+    assert "Host-Owned Primitive Extension Model" in rc_notes
+    assert "prove_aw_artifact_consumption.py" in rc_notes

@@ -21,13 +21,10 @@ from command_generation import (
     CommandGenerationHostManifest,
     FunctionConformanceTarget,
     GeneratedOutput,
-    PrimitiveContext,
     PrimitiveRegistry,
-    TypescriptFunctionConformanceTarget,
     command_package_schema_path,
     contract_conformance_cases_manifest,
     conformance_ownership_inventory,
-    execute_primitive,
     generate_command_packages,
     generated_output_freshness_report,
     load_command_package_ir,
@@ -39,7 +36,6 @@ from command_generation import (
     required_target_proof_matrix_entries,
     render_outputs,
     run_function_conformance_case,
-    run_typescript_function_conformance_case,
     run_cli_conformance_case,
     target_extension_schema_path,
     target_support_matrix_entries,
@@ -51,6 +47,8 @@ from command_generation.target_extension import (
     current_target_proof_evidence_inventory,
     structured_target_proof_evidence_inventory,
 )
+from command_generation.conformance import TypescriptFunctionConformanceTarget, run_typescript_function_conformance_case
+from command_generation.primitive_executor import PrimitiveContext, execute_primitive
 from command_generation.targets.contract import PYTHON_TARGET_LAYOUT_VERSION, TYPESCRIPT_TARGET_LAYOUT_VERSION
 from command_generation.targets.python import _python_local_runtime_binding_module
 
@@ -475,7 +473,7 @@ def test_public_api_exports_have_compatibility_classification() -> None:
     docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(encoding="utf-8")
 
     assert set(classification) == set(command_generation_api.__all__)
-    assert set(classification.values()) <= {"stable", "provisional"}
+    assert set(classification.values()) == {"stable"}
     for symbol, status in classification.items():
         assert f"| `{symbol}` | {status} |" in docs
 
@@ -483,8 +481,8 @@ def test_public_api_exports_have_compatibility_classification() -> None:
     assert classification["render_outputs"] == "stable"
     assert classification["generate_command_packages"] == "stable"
     assert classification["run_cli_conformance_case"] == "stable"
-    assert classification["invoke_typescript_operation"] == "provisional"
-    assert classification["execute_primitive"] == "provisional"
+    assert "invoke_typescript_operation" not in classification
+    assert "execute_primitive" not in classification
 
 
 def test_stable_public_api_exports_are_audited_with_contracts() -> None:
@@ -508,16 +506,10 @@ def test_public_api_audit_captures_post_separation_host_shape() -> None:
     assert "python_primitive_executor_path" not in docs
     assert "typescript_runtime_support_path" not in docs
 
-    assert "`ordinary_usage_gate`" in docs
-    assert "`package_action_after_migration`" in docs
-    assert "`compatibility_fixture_policy`" in docs
-    assert "`downstream-ordinary-path-migration`" in docs
-    assert "`downstream-ordinary-usage-proof`" in docs
-
     assert "`run_cli_conformance_case`" in docs
     assert "`run_function_conformance_case`" in docs
-    assert "`TypescriptFunctionConformanceTarget`" in docs
-    assert "remain provisional" in docs
+    assert "`TypescriptFunctionConformanceTarget`" not in docs
+    assert "provisional" not in docs
 
     assert "`generated_output_freshness_report`" in docs
     assert "`generation_metadata.target.layout_version`" in docs
@@ -1747,27 +1739,18 @@ def test_builtin_registry_declares_portable_primitives() -> None:
 def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
     definitions = {item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()}
 
-    assert {item["kind"] for item in definitions.values()} <= {"portable", "host-owned", "transitional"}
+    assert {item["kind"] for item in definitions.values()} <= {"portable", "host-owned"}
     assert definitions["filesystem.read"]["kind"] == "portable"
     assert definitions["json.parse"]["kind"] == "portable"
-    assert definitions["payload.status"]["kind"] == "transitional"
-    assert definitions["payload.verify"]["kind"] == "transitional"
-    assert definitions["payload.current-memory"]["kind"] == "transitional"
-    assert definitions["output.emit.current-memory"]["kind"] == "transitional"
     assert definitions["python.function.call"]["kind"] == "host-owned"
     assert definitions["typescript.domain.execute"]["kind"] == "host-owned"
 
-    transitional = [item for item in definitions.values() if item["kind"] == "transitional"]
-    assert transitional
-    assert all(item["owner"] == "host" for item in transitional)
     assert all(item["description"] for item in definitions.values())
 
 
-def test_transitional_primitives_declare_retirement_policy() -> None:
+def test_transitional_primitives_are_absent_from_builtin_registry() -> None:
     definitions = {item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()}
-    transitional = {primitive_id: item for primitive_id, item in definitions.items() if item["kind"] == "transitional"}
-
-    assert set(transitional) == {
+    removed_ids = {
         "workspace.root.resolve",
         "payload.status",
         "payload.lifecycle-plan",
@@ -1776,80 +1759,22 @@ def test_transitional_primitives_declare_retirement_policy() -> None:
         "output.emit.install-result",
         "output.emit.current-memory",
     }
-    for primitive in transitional.values():
-        retirement = primitive["transitional_retirement"]
-        assert set(retirement) == {
-            "target_end_state",
-            "rationale",
-            "migration_note",
-            "compatibility",
-            "coordination_issue",
-            "inventory_issue",
-            "ordinary_usage_gate",
-            "package_action_after_migration",
-            "compatibility_fixture_policy",
-        }
-        assert retirement["coordination_issue"] == "downstream-ordinary-path-migration"
-        assert retirement["inventory_issue"] == "downstream-ordinary-usage-proof"
-        assert retirement["target_end_state"] in {
-            "renamed/reshaped portable behavior",
-            "host-owned registry behavior",
-            "removed after downstream migration",
-            "retained with generic rationale",
-        }
-        assert "host-owned" in retirement["migration_note"] or "path.target_root.resolve" in retirement["migration_note"]
-        assert str(primitive["id"]) in retirement["ordinary_usage_gate"]
-        assert "downstream ordinary source operation IR" in retirement["ordinary_usage_gate"]
-        assert "zero ordinary source-operation usage" in retirement["ordinary_usage_gate"]
-        assert "compatibility-only/deprecated" in retirement["package_action_after_migration"]
-        assert "compatibility-test-only" in retirement["compatibility_fixture_policy"]
-    serialized = json.dumps(transitional, sort_keys=True)
-    assert "agentic-workspace" not in serialized
-    assert "Agentic Workspace" not in serialized
-    assert "AW" not in serialized
+
+    assert definitions.keys().isdisjoint(removed_ids)
+    assert all(item["kind"] != "transitional" for item in definitions.values())
+    serialized = json.dumps(definitions, sort_keys=True)
+    for primitive_id in removed_ids:
+        assert primitive_id not in serialized
 
 
-def test_transitional_primitives_require_owner_and_retirement_metadata() -> None:
-    missing_retirement = {
-        "id": "fixture.transitional",
-        "kind": "transitional",
-        "owner": "host",
-        "description": "Fixture transitional primitive.",
-        "target_support": {"python": "implemented"},
-    }
-    missing_owner = {
-        **missing_retirement,
-        "transitional_retirement": {
-            "target_end_state": "host-owned registry behavior",
-            "rationale": "Fixture rationale.",
-            "migration_note": "Move to a fixture-owned primitive.",
-            "compatibility": "Retain until fixture migration completes.",
-            "coordination_issue": "https://github.com/example/repo/issues/1",
-            "inventory_issue": "https://github.com/example/repo/issues/2",
-            "ordinary_usage_gate": "Do not remove while ordinary usage remains.",
-            "package_action_after_migration": "Deprecate after migration.",
-            "compatibility_fixture_policy": "Compatibility fixtures must be isolated.",
-        },
-    }
-
-    with pytest.raises(ValueError, match="transitional_retirement fields"):
-        PrimitiveRegistry.from_definitions([missing_retirement])
-    with pytest.raises(ValueError, match="must declare the host or migration owner"):
-        PrimitiveRegistry.from_definitions([{**missing_owner, "owner": "command-generation"}])
-
-
-def test_downstream_specific_primitive_coordination_is_isolated() -> None:
+def test_downstream_specific_primitive_coordination_docs_are_removed() -> None:
     root = Path(__file__).resolve().parents[1]
     registry_source = (root / "src" / "command_generation" / "primitive_registry.py").read_text(encoding="utf-8")
-    ordinary_retirement_doc = (root / "docs" / "transitional-primitive-retirement.md").read_text(encoding="utf-8")
-    coordination_record = (root / "docs" / "transitional-primitive-downstream-coordination.md").read_text(encoding="utf-8")
 
     assert "agentic-workspace" not in registry_source
-    assert "agentic-workspace" not in ordinary_retirement_doc
     assert "--aw-primitive-ownership" not in registry_source
-    assert "--aw-primitive-ownership" not in ordinary_retirement_doc
-    assert "coordination-only record" in coordination_record
-    assert "--aw-primitive-ownership" in coordination_record
+    assert not (root / "docs" / "transitional-primitive-retirement.md").exists()
+    assert not (root / "docs" / "transitional-primitive-downstream-coordination.md").exists()
 
 
 def _target_extension_contract(**overrides: object) -> dict[str, object]:
