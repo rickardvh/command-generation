@@ -126,15 +126,33 @@ def _python_command_module(
     }
     if operation_id in direct_handlers:
         handler = direct_handlers[operation_id]
-        import_module = str(handler["import_module"])
-        imported_function = str(handler.get("function") or _runtime_adapter_function_name(operation_id))
-        local_binding = _local_runtime_binding_for_import(package, import_module)
-        if local_binding is not None:
-            local_import = _command_module_import_for_binding(local_binding)
-            run_body = f"    from {local_import} import {imported_function}\n\n    return {imported_function}(args)\n"
+        if handler.get("handler") == "module_front_door":
+            runtime_module_file = _runtime_module_file_for_package(package)
+            if runtime_module_file == "cli":
+                rendered_handler = _render_module_front_door_runtime_handler("run", handler)
+                run_body = rendered_handler.split("def run(args: argparse.Namespace) -> int:\n", 1)[1]
+                support_imports = "import contextlib\nimport io\nimport json\nfrom ..cli import build_generated_parser\n"
+            else:
+                run_body = f"    from ..{runtime_module_file} import _run_generated_operation\n\n    return _run_generated_operation({operation_id!r}, args)\n"
+                support_imports = ""
+        elif handler.get("handler") == "argparse_function_call":
+            runtime_module_file = _runtime_module_file_for_package(package)
+            if runtime_module_file == "cli":
+                rendered_handler = _render_argparse_function_call_handler("run", handler)
+                run_body = rendered_handler.split("def run(args: argparse.Namespace) -> int:\n", 1)[1]
+            else:
+                run_body = f"    from ..{runtime_module_file} import _run_generated_operation\n\n    return _run_generated_operation({operation_id!r}, args)\n"
+            support_imports = ""
         else:
-            run_body = f"    from {import_module} import {imported_function}\n\n    return {imported_function}(args)\n"
-        support_imports = ""
+            import_module = str(handler["import_module"])
+            imported_function = str(handler.get("function") or _runtime_adapter_function_name(operation_id))
+            local_binding = _local_runtime_binding_for_import(package, import_module)
+            if local_binding is not None:
+                local_import = _command_module_import_for_binding(local_binding)
+                run_body = f"    from {local_import} import {imported_function}\n\n    return {imported_function}(args)\n"
+            else:
+                run_body = f"    from {import_module} import {imported_function}\n\n    return {imported_function}(args)\n"
+            support_imports = ""
         invoke_function = (
             "\n\n"
             "def invoke(_values: Mapping[str, Any]) -> object:\n"
@@ -650,6 +668,8 @@ def _local_runtime_binding_functions(package: dict[str, Any], binding: dict[str,
     python_runtime_binding = package.get("python_runtime_binding", {})
     if isinstance(python_runtime_binding, dict):
         for handler in python_runtime_binding.get("runtime_module_handlers", []):
+            if isinstance(handler, dict) and handler.get("handler") in {"module_front_door", "argparse_function_call"}:
+                continue
             if isinstance(handler, dict) and handler.get("import_module") == source_import_module:
                 functions.add(str(handler.get("function") or _runtime_adapter_function_name(str(handler["operation_id"]))))
     return sorted(functions)
@@ -1070,6 +1090,189 @@ def _runtime_adapter_function_name(operation_id: str) -> str:
     return "_run_" + "".join(character if character.isalnum() else "_" for character in operation_id) + "_adapter"
 
 
+def _render_argparse_function_call_handler(function_name: str, handler: dict[str, Any]) -> str:
+    import_module = str(handler["import_module"])
+    imported_function = str(handler["function"])
+    support_import_module = str(handler.get("support_import_module") or import_module)
+    result_mode = str(handler.get("result", "return_zero"))
+    emit_payload = handler.get("emit_payload", {})
+    emit_import_module = str(emit_payload.get("import_module") or support_import_module) if isinstance(emit_payload, dict) else ""
+    emit_function = str(emit_payload.get("function") or "_emit_payload") if isinstance(emit_payload, dict) else "_emit_payload"
+    emit_format_attr = str(emit_payload.get("format_attr") or "format") if isinstance(emit_payload, dict) else "format"
+    argument_specs = [spec for spec in handler.get("arguments", []) if isinstance(spec, dict)]
+    lines = [f"def {function_name}(args: argparse.Namespace) -> int:"]
+    kwargs: list[str] = []
+    needs_support: set[str] = set()
+    for index, spec in enumerate(argument_specs):
+        kind = str(spec["kind"])
+        name = str(spec["name"])
+        variable_name = f"_arg_{index}_{name}"
+        if kind == "attr":
+            attr = str(spec["attr"])
+            default = spec.get("default")
+            lines.append(f"    {variable_name} = getattr(args, {attr!r}, {default!r})")
+        elif kind == "bool_attr":
+            attr = str(spec["attr"])
+            lines.append(f"    {variable_name} = bool(getattr(args, {attr!r}, False))")
+        elif kind == "list_attr":
+            attr = str(spec["attr"])
+            lines.append(f"    {variable_name} = list(getattr(args, {attr!r}, []) or [])")
+        elif kind == "target_root":
+            attr = str(spec.get("attr") or "target")
+            default_current = bool(spec.get("default_current", True))
+            allow_none = bool(spec.get("allow_none", False))
+            validate_command = str(spec.get("validate_command") or "")
+            needs_support.add("_resolve_target_root")
+            if validate_command:
+                needs_support.add("_validate_target_root")
+            if default_current:
+                lines.append(f"    {variable_name} = _resolve_target_root(getattr(args, {attr!r}, None))")
+            else:
+                lines.append(f"    {variable_name} = _resolve_target_root(getattr(args, {attr!r}, None)) if getattr(args, {attr!r}, None) else None")
+            if not allow_none:
+                lines.append(f"    if {variable_name} is None:")
+                lines.append("        raise ValueError('target root resolution returned None')")
+            if validate_command:
+                if allow_none:
+                    lines.append(f"    if {variable_name} is not None:")
+                    lines.append(f"        _validate_target_root(command_name={validate_command!r}, target_root={variable_name})")
+                else:
+                    lines.append(f"    _validate_target_root(command_name={validate_command!r}, target_root={variable_name})")
+        elif kind == "diagnostic_profile":
+            default = str(spec.get("default") or "tiny")
+            needs_support.add("_diagnostic_profile")
+            lines.append(f"    {variable_name} = _diagnostic_profile(args, default={default!r})")
+        elif kind == "module_descriptors":
+            needs_support.update({"_module_operations", "_validate_descriptor_contract"})
+            lines.append(f"    {variable_name} = _module_operations()")
+            if bool(spec.get("validate", True)):
+                lines.append(f"    _validate_descriptor_contract({variable_name})")
+        else:
+            raise ValueError(f"unsupported argparse_function_call argument kind: {kind!r}")
+        kwargs.append(f"{name}={variable_name}")
+    if needs_support:
+        imported = ", ".join(sorted(needs_support))
+        lines.insert(1, f"    from {support_import_module} import {imported}")
+    lines.append(f"    from {import_module} import {imported_function}")
+    call = f"{imported_function}({', '.join(kwargs)})"
+    if result_mode == "return_int":
+        lines.append(f"    return int({call} or 0)")
+    elif result_mode == "emit_payload":
+        lines.append(f"    payload = {call}")
+        lines.append(f"    from {emit_import_module} import {emit_function}")
+        lines.append(f"    {emit_function}(payload=payload, format_name=getattr(args, {emit_format_attr!r}, 'text'))")
+        lines.append("    return 0")
+    elif result_mode == "return_zero":
+        lines.append(f"    {call}")
+        lines.append("    return 0")
+    else:
+        raise ValueError(f"unsupported argparse_function_call result mode: {result_mode!r}")
+    return "\n".join(lines) + "\n"
+
+
+def _render_module_front_door_runtime_handler(function_name: str, handler: dict[str, Any]) -> str:
+    command_attr = str(handler["command_attr"])
+    target_attr = str(handler.get("target_attr", "target"))
+    format_attr = str(handler.get("format_attr", "format"))
+    module_import = str(handler["module_import"])
+    module_main = str(handler.get("module_main", "main"))
+    module_program = str(handler["module_program"])
+    include_module_program = bool(handler.get("include_module_program", False))
+    help_payload_import = str(handler["help_payload_import_module"])
+    help_payload_function = str(handler["help_payload_function"])
+    help_text_import = str(handler.get("help_text_import_module") or help_payload_import)
+    help_text_function = str(handler["help_text_function"])
+    missing_message = str(handler["missing_module_message"])
+    replacements = [
+        (str(replacement["old"]), str(replacement["new"]))
+        for replacement in handler.get("stdout_replacements", [])
+        if isinstance(replacement, dict)
+    ]
+    option_specs = [
+        {
+            "option": str(spec["option"]),
+            "attr": str(spec["attr"]),
+            "fallback_attr": str(spec.get("fallback_attr", "")),
+            "kind": str(spec.get("kind", "value")),
+        }
+        for spec in handler.get("option_specs", [])
+        if isinstance(spec, dict)
+    ]
+    positional_specs = [
+        {
+            "commands": [str(command) for command in spec.get("commands", [])],
+            "attr": str(spec["attr"]),
+        }
+        for spec in handler.get("positionals", [])
+        if isinstance(spec, dict)
+    ]
+    local_handlers = {
+        str(local["command"]): (str(local["import_module"]), str(local["function"]))
+        for local in handler.get("local_command_handlers", [])
+        if isinstance(local, dict)
+    }
+    return (
+        f"def {function_name}(args: argparse.Namespace) -> int:\n"
+        f"    command_value = getattr(args, {command_attr!r}, None)\n"
+        "    if not command_value:\n"
+        f"        from {help_payload_import} import {help_payload_function} as help_payload_function\n\n"
+        f"        payload = help_payload_function(target=getattr(args, {target_attr!r}, None))\n"
+        f"        if getattr(args, {format_attr!r}, None) == 'json':\n"
+        "            print(json.dumps(payload, indent=2))\n"
+        "        else:\n"
+        f"            from {help_text_import} import {help_text_function} as help_text_function\n\n"
+        "            help_text_function(payload)\n"
+        "        return 0\n"
+        f"    local_handlers = {local_handlers!r}\n"
+        "    local_handler = local_handlers.get(str(command_value))\n"
+        "    if local_handler is not None:\n"
+        "        module_name, function_name = local_handler\n"
+        "        module = __import__(module_name, fromlist=[function_name])\n"
+        "        return getattr(module, function_name)(args)\n"
+        f"    argv = [{module_program!r}] if {include_module_program!r} else []\n"
+        "    argv.append(str(command_value))\n"
+        f"    for commands, attr in {[(spec['commands'], spec['attr']) for spec in positional_specs]!r}:\n"
+        "        if str(command_value) in commands:\n"
+        "            value = getattr(args, attr, None)\n"
+        "            if value is not None and value != '' and value != []:\n"
+        "                argv.append(str(value))\n"
+        f"    for option, attr, fallback_attr, kind in {[(spec['option'], spec['attr'], spec['fallback_attr'], spec['kind']) for spec in option_specs]!r}:\n"
+        "        value = getattr(args, attr, None)\n"
+        "        if (value is None or value == [] or value == '') and fallback_attr:\n"
+        "            value = getattr(args, fallback_attr, None)\n"
+        "        if kind == 'flag':\n"
+        "            if bool(value):\n"
+        "                argv.append(option)\n"
+        "        elif kind == 'repeated':\n"
+        "            if isinstance(value, str):\n"
+        "                value = [value]\n"
+        "            for item in value or []:\n"
+        "                argv.extend([option, str(item)])\n"
+        "        elif kind == 'repeated_group':\n"
+        "            if isinstance(value, str):\n"
+        "                value = [value]\n"
+        "            if value:\n"
+        "                argv.append(option)\n"
+        "                argv.extend(str(item) for item in value)\n"
+        "        elif value is not None and value != '' and value != []:\n"
+        "            argv.extend([option, str(value)])\n"
+        "    try:\n"
+        f"        module = __import__({module_import!r}, fromlist=[{module_main!r}])\n"
+        f"        module_main = getattr(module, {module_main!r})\n"
+        "        buffer = io.StringIO()\n"
+        "        with contextlib.redirect_stdout(buffer):\n"
+        "            result = module_main(argv)\n"
+        "        output = buffer.getvalue()\n"
+        f"        for old, new in {replacements!r}:\n"
+        "            output = output.replace(old, new)\n"
+        "        print(output, end='')\n"
+        "        return int(result or 0)\n"
+        "    except ImportError:\n"
+        f"        build_generated_parser().error({missing_message!r})\n"
+        "        return 2\n"
+    )
+
+
 def _python_runtime_handler_module(
     package: dict[str, Any],
     binding: dict[str, Any],
@@ -1090,13 +1293,18 @@ def _python_runtime_handler_module(
         function_name = _runtime_adapter_function_name(operation_id)
         if operation_id in direct_handlers:
             handler = direct_handlers[operation_id]
-            import_module = str(handler["import_module"])
-            imported_function = str(handler.get("function") or function_name)
-            handler_functions.append(
-                f"def {function_name}(args: argparse.Namespace) -> int:\n"
-                f"    from {import_module} import {imported_function}\n\n"
-                f"    return {imported_function}(args)\n"
-            )
+            if handler.get("handler") == "module_front_door":
+                handler_functions.append(_render_module_front_door_runtime_handler(function_name, handler))
+            elif handler.get("handler") == "argparse_function_call":
+                handler_functions.append(_render_argparse_function_call_handler(function_name, handler))
+            else:
+                import_module = str(handler["import_module"])
+                imported_function = str(handler.get("function") or function_name)
+                handler_functions.append(
+                    f"def {function_name}(args: argparse.Namespace) -> int:\n"
+                    f"    from {import_module} import {imported_function}\n\n"
+                    f"    return {imported_function}(args)\n"
+                )
         else:
             handler_functions.append(
                 f"def {function_name}(args: argparse.Namespace) -> int:\n"
@@ -1111,6 +1319,9 @@ def _python_runtime_handler_module(
         '"""\n\n'
         "from __future__ import annotations\n\n"
         "import argparse\n"
+        "import contextlib\n"
+        "import io\n"
+        "import json\n"
         "import sys\n"
         "from typing import Any\n\n"
         "# DO NOT EDIT DIRECTLY.\n"
