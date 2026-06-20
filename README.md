@@ -2,7 +2,7 @@
 
 `command-generation` renders command-package artifacts from a host-owned command package IR. It is a maintainer dependency: generated runtimes may contain the rendered outputs, but they do not import this package at runtime.
 
-The package exists to keep command surface generation, reusable conformance runners, and portable primitive machinery in one generic library while leaving product semantics in the host repository. Agentic Workspace is one consumer, not the runtime dependency boundary.
+The package exists to keep command surface generation, reusable conformance runners, and portable primitive machinery in one generic library while leaving product semantics in host repositories.
 
 ## What It Owns
 

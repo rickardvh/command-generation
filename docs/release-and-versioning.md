@@ -63,4 +63,4 @@ Host repositories should:
 - fail proof when generated artifacts are stale for the declared generator version;
 - choose wrapper/process vs direct-function conformance based on the behavior under test.
 
-Agentic Workspace is expected to consume this package by semver artifact once the release pipeline exists, while AW local-source dogfooding remains an AW repository concern.
+Host repositories are expected to consume this package by semver artifact once the release pipeline exists, while local-source dogfooding remains a host repository concern.

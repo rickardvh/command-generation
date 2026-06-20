@@ -1744,19 +1744,24 @@ def test_transitional_primitives_declare_retirement_policy() -> None:
             "package_action_after_migration",
             "compatibility_fixture_policy",
         }
-        assert retirement["coordination_issue"] == "https://github.com/rickardvh/agentic-workspace/issues/1638"
-        assert retirement["inventory_issue"] == "https://github.com/rickardvh/agentic-workspace/issues/1639"
+        assert retirement["coordination_issue"] == "downstream-ordinary-path-migration"
+        assert retirement["inventory_issue"] == "downstream-ordinary-usage-proof"
         assert retirement["target_end_state"] in {
             "renamed/reshaped portable behavior",
             "host-owned registry behavior",
             "removed after downstream migration",
             "retained with generic rationale",
         }
-        assert "AW" in retirement["migration_note"] or "path.target_root.resolve" in retirement["migration_note"]
+        assert "host-owned" in retirement["migration_note"] or "path.target_root.resolve" in retirement["migration_note"]
         assert str(primitive["id"]) in retirement["ordinary_usage_gate"]
+        assert "downstream ordinary source operation IR" in retirement["ordinary_usage_gate"]
         assert "zero ordinary source-operation usage" in retirement["ordinary_usage_gate"]
         assert "compatibility-only/deprecated" in retirement["package_action_after_migration"]
         assert "compatibility-test-only" in retirement["compatibility_fixture_policy"]
+    serialized = json.dumps(transitional, sort_keys=True)
+    assert "agentic-workspace" not in serialized
+    assert "Agentic Workspace" not in serialized
+    assert "AW" not in serialized
 
 
 def test_transitional_primitives_require_owner_and_retirement_metadata() -> None:
@@ -1786,6 +1791,20 @@ def test_transitional_primitives_require_owner_and_retirement_metadata() -> None
         PrimitiveRegistry.from_definitions([missing_retirement])
     with pytest.raises(ValueError, match="must declare the host or migration owner"):
         PrimitiveRegistry.from_definitions([{**missing_owner, "owner": "command-generation"}])
+
+
+def test_downstream_specific_primitive_coordination_is_isolated() -> None:
+    root = Path(__file__).resolve().parents[1]
+    registry_source = (root / "src" / "command_generation" / "primitive_registry.py").read_text(encoding="utf-8")
+    ordinary_retirement_doc = (root / "docs" / "transitional-primitive-retirement.md").read_text(encoding="utf-8")
+    coordination_record = (root / "docs" / "transitional-primitive-downstream-coordination.md").read_text(encoding="utf-8")
+
+    assert "agentic-workspace" not in registry_source
+    assert "agentic-workspace" not in ordinary_retirement_doc
+    assert "--aw-primitive-ownership" not in registry_source
+    assert "--aw-primitive-ownership" not in ordinary_retirement_doc
+    assert "coordination-only record" in coordination_record
+    assert "--aw-primitive-ownership" in coordination_record
 
 
 def _target_extension_contract(**overrides: object) -> dict[str, object]:
