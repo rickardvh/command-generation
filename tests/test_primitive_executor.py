@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -324,6 +325,17 @@ def test_output_emit_supports_json_and_text(primitive_context: PrimitiveContext)
 
 
 def test_output_emit_serializes_module_result_objects(primitive_context: PrimitiveContext) -> None:
+    @dataclass
+    class Action:
+        kind: str
+        path: Path
+
+    @dataclass
+    class DataclassResult:
+        dry_run: bool
+        message: str
+        actions: list[Action]
+
     class ModuleResult:
         def to_dict(self) -> dict[str, object]:
             return {
@@ -341,6 +353,16 @@ def test_output_emit_serializes_module_result_objects(primitive_context: Primiti
     assert emitted_payload["target_root"] == str(primitive_context.cwd)
     assert "Installed" in emitted_text
     assert "- AGENTS.md" in emitted_text
+
+    dataclass_json = execute_primitive(
+        "output.emit",
+        values={
+            "result": DataclassResult(False, "Planned", [Action("create", primitive_context.cwd / "plan.md")]),
+            "format": "json",
+        },
+        context=primitive_context,
+    )
+    assert json.loads(dataclass_json)["actions"][0]["path"] == str(primitive_context.cwd / "plan.md")
 
 
 def test_transitional_host_owned_primitives_are_not_generic_executor_behavior(primitive_context: PrimitiveContext) -> None:
