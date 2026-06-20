@@ -510,11 +510,15 @@ def _emit_output(
 
 
 def _plain_output_result(result: Any) -> Any:
+    if isinstance(result, Path):
+        return str(result)
     if isinstance(result, Mapping):
-        return dict(result)
+        return {str(key): _plain_output_result(value) for key, value in result.items()}
+    if isinstance(result, Sequence) and not isinstance(result, (str, bytes, bytearray)):
+        return [_plain_output_result(value) for value in result]
     to_dict = getattr(result, "to_dict", None)
     if callable(to_dict):
-        return to_dict()
+        return _plain_output_result(to_dict())
     return result
 
 
