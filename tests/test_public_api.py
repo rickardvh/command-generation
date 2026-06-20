@@ -1238,6 +1238,17 @@ def test_python_host_primitive_support_keeps_generated_executor_skeleton(tmp_pat
     assert "HOST_SENTINEL = 'host-owned-primitive-support'" in support
 
 
+def test_typescript_host_primitive_support_keeps_generated_runtime_shell() -> None:
+    root = Path(__file__).resolve().parents[1]
+    manifest_source = (root / "src" / "command_generation" / "host_manifest.py").read_text(encoding="utf-8")
+    renderer_source = (root / "src" / "command_generation" / "targets" / "typescript.py").read_text(encoding="utf-8")
+
+    assert "typescript_runtime_support_path" not in manifest_source
+    assert "typescript_runtime_support_path" not in renderer_source
+    assert "hostPrimitiveSupport.mjs" in renderer_source
+    assert "function executePrimitive(" in renderer_source
+
+
 def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics() -> None:
     source_module = types.ModuleType("fake_source_runtime_for_facade")
 

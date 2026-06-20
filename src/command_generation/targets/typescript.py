@@ -300,18 +300,6 @@ def _typescript_runtime_module(
     regenerate_command: str,
     host_manifest: CommandGenerationHostManifest,
 ) -> str:
-    if host_manifest.typescript_runtime_support_path is not None:
-        support_path = host_manifest.typescript_runtime_support_path
-        support = support_path.read_text(encoding="utf-8")
-        support_label = _host_runtime_support_label(host_manifest=host_manifest, support_path=support_path)
-        return (
-            "// Generated native TypeScript operation runtime.\n"
-            f"// Source: {source_path}\n"
-            f"// Host runtime support: {support_label}\n"
-            f"// Regenerate with: {regenerate_command}\n"
-            "// DO NOT EDIT DIRECTLY.\n\n"
-            + support
-        )
     support_import = ""
     configured_host_primitive_call = ""
     support_label = "none"

@@ -42,7 +42,7 @@ See [Transitional Primitive Retirement](docs/transitional-primitive-retirement.m
 - `command_package_schema_path()` returns the packaged JSON schema.
 - `render_outputs(manifest, repo_root, source_path, regenerate_command, host_manifest=None)` returns in-memory generated files.
 - `generate_command_packages(..., check=True|False)` checks or writes generated files.
-- `CommandGenerationHostManifest` declares host roots, custom primitive registry entries, target bindings, and optional host-owned runtime support.
+- `CommandGenerationHostManifest` declares host roots, custom primitive registry entries, target bindings, and optional host-owned primitive support.
 - `PrimitiveRegistry` and `PrimitiveDefinition` describe portable or host-owned primitives with target support.
 - `TargetExtensionContract`, `validate_target_extension_contract(...)`, and `target_support_matrix_entries(...)` define how new generated targets declare projection rules, runtime dependencies, callable/wrapper shape, packaging, conformance execution, and matrix support without owning product semantics.
 - `process_case_from_contract(...)`, `CliConformanceTarget`, and `run_cli_conformance_case(...)` provide the generic black-box runner for contract-owned CLI/process conformance cases.
@@ -52,7 +52,7 @@ See [Transitional Primitive Retirement](docs/transitional-primitive-retirement.m
 
 See [Public API Classification](docs/public-api.md) for stable and provisional `command_generation.__all__` exports.
 
-Host-owned primitive support is intentionally narrower than target executor replacement. `command-generation` renders the Python primitive executor skeleton, TypeScript runtime shell, and built-in portable primitive dispatch. Hosts may provide `python_primitive_support_path` or `typescript_primitive_support_path` modules that export only domain-runtime primitive behavior through `execute_host_primitive(...)` or `executeHostPrimitive(...)`. Unsupported host/domain primitive IDs fail explicitly at registry validation or runtime dispatch, and generated runtimes remain self-contained after rendering.
+Host-owned primitive support is intentionally narrower than target executor replacement. `command-generation` renders the Python primitive executor skeleton, TypeScript runtime shell, and built-in portable primitive dispatch. Hosts may provide `python_primitive_support_path` or `typescript_primitive_support_path` modules that export only domain-runtime primitive behavior through `execute_host_primitive(...)` or `executeHostPrimitive(...)`; hosts do not replace the generated target shell. Unsupported host/domain primitive IDs fail explicitly at registry validation or runtime dispatch, and generated runtimes remain self-contained after rendering.
 
 ## Command Package IR
 

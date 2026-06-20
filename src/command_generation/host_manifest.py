@@ -19,7 +19,6 @@ class CommandGenerationHostManifest:
     target_bindings: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     python_primitive_support_path: Path | None = None
     typescript_primitive_support_path: Path | None = None
-    typescript_runtime_support_path: Path | None = None
     operation_schema_version: str = "command-generation/operation/v1"
 
     @classmethod
@@ -70,6 +69,5 @@ class CommandGenerationHostManifest:
             target_bindings=target_bindings,
             python_primitive_support_path=_path(raw.get("python_primitive_support_path")),
             typescript_primitive_support_path=_path(raw.get("typescript_primitive_support_path")),
-            typescript_runtime_support_path=_path(raw.get("typescript_runtime_support_path")),
             operation_schema_version=str(raw.get("operation_schema_version") or "command-generation/operation/v1"),
         )
