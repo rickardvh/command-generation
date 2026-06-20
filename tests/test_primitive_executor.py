@@ -336,6 +336,13 @@ def test_output_emit_serializes_module_result_objects(primitive_context: Primiti
         message: str
         actions: list[Action]
 
+    @dataclass
+    class ContractResult:
+        raw_path: Path
+
+        def to_dict(self) -> dict[str, object]:
+            return {"path": "contract-owned/path.md"}
+
     class ModuleResult:
         def to_dict(self) -> dict[str, object]:
             return {
@@ -363,6 +370,13 @@ def test_output_emit_serializes_module_result_objects(primitive_context: Primiti
         context=primitive_context,
     )
     assert json.loads(dataclass_json)["actions"][0]["path"] == str(primitive_context.cwd / "plan.md")
+
+    contract_json = execute_primitive(
+        "output.emit",
+        values={"result": ContractResult(primitive_context.cwd / "raw.md"), "format": "json"},
+        context=primitive_context,
+    )
+    assert json.loads(contract_json)["path"] == "contract-owned/path.md"
 
 
 def test_transitional_host_owned_primitives_are_not_generic_executor_behavior(primitive_context: PrimitiveContext) -> None:
