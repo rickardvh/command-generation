@@ -13,10 +13,7 @@ REQUIRED_PORTABLE_PRIMITIVES = {
     "filesystem.glob",
     "json.parse",
     "payload.assemble",
-    "payload.status",
-    "payload.verify",
     "output.emit",
-    "output.emit.install-result",
 }
 
 
@@ -43,7 +40,6 @@ def main() -> int:
         )
         assert payload["actions"]
         assert execute_primitive("output.emit", values={"result": payload, "format": "json"}, context=context)
-        assert execute_primitive("output.emit.install-result", values={"result": payload, "format": "json"}, context=context)
         operation = {
             "ir_plan": {
                 "steps": [

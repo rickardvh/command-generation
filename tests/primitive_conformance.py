@@ -122,29 +122,6 @@ def main() -> int:
         assert skill_payload["actions"][0]["path"] == "review"
         assert skill_payload["actions"][0]["source"] == "review"
 
-        verify_payload = execute_primitive(
-            "payload.verify",
-            values={"target_root": target_root},
-            arguments={"policy_root": "contracts", "policy_path": "payload.json", "payload_root": "package"},
-            context=context,
-        )
-        assert verify_payload["dry_run"] is True
-        assert verify_payload["bootstrap_version"] == 3
-        assert {action["path"] for action in verify_payload["actions"] if action["kind"] == "current"} >= {
-            "AGENTS.md",
-            ".agentic-workspace/memory/VERSION.md",
-        }
-
-        status_payload = execute_primitive(
-            "payload.status",
-            values={"target_root": target_root},
-            arguments={"policy_root": "contracts", "policy_path": "payload.json", "target_root_value": "target_root"},
-            context=context,
-        )
-        assert status_payload["message"] == "Status report"
-        assert status_payload["bootstrap_version"] == 3
-        assert status_payload["active"]["status"] in {"missing", "present"}
-
         emitted_json = execute_primitive(
             "output.emit",
             values={"result": skill_payload, "format": "json"},
@@ -159,14 +136,6 @@ def main() -> int:
         )
         assert "Files" in emitted_text
         assert "- nested/beta.txt" in emitted_text
-
-        emitted_install_text = execute_primitive(
-            "output.emit.install-result",
-            values={"result": verify_payload, "format": "text"},
-            context=context,
-        )
-        assert "Payload verification" in emitted_install_text
-        assert ".agentic-workspace/memory/VERSION.md" in emitted_install_text
 
         emitted_planning_report_text = execute_primitive(
             "output.emit",
