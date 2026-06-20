@@ -67,14 +67,16 @@ jobs:
               with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
                   handle.write(f"{name}={value}\n")
 
-          def parse_version(version: str) -> tuple[int, int, int]:
-              try:
-                  parts = tuple(int(part) for part in version.split("."))
-              except ValueError:
-                  raise SystemExit(f"Package version must be numeric semver, got {version!r}")
-              if len(parts) != 3:
-                  raise SystemExit(f"Package version must be MAJOR.MINOR.PATCH, got {version!r}")
-              return parts
+          def parse_version(version: str) -> tuple[int, int, int, str]:
+              match = re.fullmatch(r"(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?P<prerelease>rc\d+)?", version)
+              if not match:
+                  raise SystemExit(f"Package version must be MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCHrcN, got {version!r}")
+              return (
+                  int(match.group("major")),
+                  int(match.group("minor")),
+                  int(match.group("patch")),
+                  match.group("prerelease") or "",
+              )
 
           def set_release_outputs(version: str) -> None:
               output("release_needed", "true")
@@ -82,7 +84,7 @@ jobs:
               output("tag", f"v{version}")
 
           message = os.environ["HEAD_COMMIT_MESSAGE"]
-          if os.environ["GITHUB_ACTOR"] == "github-actions[bot]" and re.match(r"^Release v\d+\.\d+\.\d+$", message.strip()):
+          if os.environ["GITHUB_ACTOR"] == "github-actions[bot]" and re.match(r"^Release v\d+\.\d+\.\d+(?:rc\d+)?$", message.strip()):
               print("Release bump commit detected; no additional release bump needed.")
               output("release_needed", "false")
               raise SystemExit(0)
@@ -142,7 +144,18 @@ jobs:
               )
               raise SystemExit(1)
 
-          major, minor, patch = parse_version(current_version)
+          major, minor, patch, prerelease = parse_version(current_version)
+          if prerelease:
+              tag = f"v{current_version}"
+              if run("git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False).returncode == 0:
+                  print(f"Release tag {tag} already exists.", file=sys.stderr)
+                  raise SystemExit(1)
+              print(f"PR #{pr_number} declares prerelease version {current_version}; releasing it without another bump.")
+              set_release_outputs(current_version)
+              output("pr_number", pr_number)
+              output("semver_label", selected[0])
+              raise SystemExit(0)
+
           label = selected[0]
           if label == "semver:major":
               major += 1
@@ -237,4 +250,5 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
           generate_release_notes: true
+          prerelease: ${{ contains(steps.release-bump.outputs.version, 'rc') }}
           fail_on_unmatched_files: true

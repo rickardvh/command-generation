@@ -20,7 +20,6 @@ class PrimitiveDefinition:
     conformance_refs: tuple[str, ...] = ()
     unsupported_behavior: str = "fail"
     unsupported_targets: Mapping[str, str] = field(default_factory=dict)
-    transitional_retirement: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "PrimitiveDefinition":
@@ -42,13 +41,6 @@ class PrimitiveDefinition:
         raw_kind = str(raw.get("kind", "portable")).strip() or "portable"
         kind_aliases = {"host": "host-owned"}
         normalized_kind = kind_aliases.get(raw_kind, raw_kind)
-        transitional_retirement = object_field("transitional_retirement")
-        if normalized_kind == "transitional":
-            _validate_transitional_retirement(
-                primitive_id,
-                owner=str(raw.get("owner", "command-generation")),
-                retirement=transitional_retirement,
-            )
         return cls(
             id=primitive_id,
             kind=normalized_kind,
@@ -63,7 +55,6 @@ class PrimitiveDefinition:
             conformance_refs=tuple(normalized_refs),
             unsupported_behavior=str(raw.get("unsupported_behavior", "fail")),
             unsupported_targets={str(key): str(value) for key, value in object_field("unsupported_targets").items()},
-            transitional_retirement=transitional_retirement,
         )
 
     def support_for(self, target: str) -> str:
@@ -120,65 +111,9 @@ class PrimitiveRegistry:
                 "conformance_refs": list(definition.conformance_refs),
                 "unsupported_behavior": definition.unsupported_behavior,
                 "unsupported_targets": dict(definition.unsupported_targets),
-                "transitional_retirement": dict(definition.transitional_retirement),
             }
             for definition in sorted(self._definitions.values(), key=lambda item: item.id)
         ]
-
-
-def _validate_transitional_retirement(primitive_id: str, *, owner: str, retirement: Mapping[str, Any]) -> None:
-    if owner == "command-generation":
-        raise ValueError(f"transitional primitive {primitive_id!r} must declare the host or migration owner")
-    required = {
-        "target_end_state",
-        "rationale",
-        "migration_note",
-        "compatibility",
-        "coordination_issue",
-        "inventory_issue",
-        "ordinary_usage_gate",
-        "package_action_after_migration",
-        "compatibility_fixture_policy",
-    }
-    missing = sorted(field for field in required if not str(retirement.get(field, "")).strip())
-    if missing:
-        raise ValueError(
-            f"transitional primitive {primitive_id!r} must declare transitional_retirement fields: {', '.join(missing)}"
-        )
-
-
-_DOWNSTREAM_TRANSITIONAL_MIGRATION_REF = "downstream-ordinary-path-migration"
-_DOWNSTREAM_TRANSITIONAL_INVENTORY_REF = "downstream-ordinary-usage-proof"
-
-
-def _aw_transitional_retirement(
-    *,
-    primitive_id: str,
-    target_end_state: str,
-    rationale: str,
-    migration_note: str,
-    compatibility: str,
-) -> dict[str, str]:
-    return {
-        "target_end_state": target_end_state,
-        "rationale": rationale,
-        "migration_note": migration_note,
-        "compatibility": compatibility,
-        "coordination_issue": _DOWNSTREAM_TRANSITIONAL_MIGRATION_REF,
-        "inventory_issue": _DOWNSTREAM_TRANSITIONAL_INVENTORY_REF,
-        "ordinary_usage_gate": (
-            f"Do not deprecate or remove {primitive_id} while downstream ordinary source operation IR references it; "
-            f"{_DOWNSTREAM_TRANSITIONAL_INVENTORY_REF} must prove zero ordinary source-operation usage."
-        ),
-        "package_action_after_migration": (
-            f"After downstream ordinary-path usage is gone, classify {primitive_id} as compatibility-only/deprecated, "
-            "keep only explicitly isolated compatibility fixtures, and remove or replace it in a compatibility-significant release."
-        ),
-        "compatibility_fixture_policy": (
-            "Remaining command-generation fixture usage must be compatibility-test-only, path-isolated, "
-            "and not treated as ordinary downstream dependence."
-        ),
-    }
 
 
 BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
@@ -188,20 +123,6 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "kind": "portable",
             "description": "Resolve a caller-supplied target path under the execution working directory.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
-        },
-        {
-            "id": "workspace.root.resolve",
-            "kind": "transitional",
-            "owner": "host",
-            "description": "Legacy workspace-shaped root resolver retained for existing generated packages.",
-            "target_support": {"python": "implemented", "typescript": "implemented"},
-            "transitional_retirement": _aw_transitional_retirement(
-                primitive_id="workspace.root.resolve",
-                target_end_state="renamed/reshaped portable behavior",
-                rationale="Existing workspace-shaped manifests use a workspace-named root resolver, but the generic behavior is target path resolution.",
-                migration_note="Migrate host manifests to path.target_root.resolve where repository-root semantics are not product-specific.",
-                compatibility="Retain until downstream generated packages no longer reference workspace.root.resolve.",
-            ),
         },
         {
             "id": "filesystem.exists",
@@ -240,94 +161,10 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "target_support": {"python": "implemented", "typescript": "implemented"},
         },
         {
-            "id": "payload.status",
-            "kind": "transitional",
-            "owner": "host",
-            "description": "Installed-payload status policy retained for existing host-style package manifests.",
-            "target_support": {"python": "implemented", "typescript": "implemented"},
-            "transitional_retirement": _aw_transitional_retirement(
-                primitive_id="payload.status",
-                target_end_state="host-owned registry behavior",
-                rationale="Installed-payload status rules are host product policy, not generic command-generation payload assembly.",
-                migration_note="Move status policy into a host-owned primitive registry/runtime implementation.",
-                compatibility="Retain until downstream manifests have migrated and package release notes announce removal or replacement.",
-            ),
-        },
-        {
-            "id": "payload.lifecycle-plan",
-            "kind": "transitional",
-            "owner": "host",
-            "description": "Installed-payload lifecycle policy retained for existing host-style package manifests.",
-            "target_support": {"python": "implemented", "typescript": "implemented"},
-            "transitional_retirement": _aw_transitional_retirement(
-                primitive_id="payload.lifecycle-plan",
-                target_end_state="host-owned registry behavior",
-                rationale="Lifecycle-plan interpretation is host package lifecycle policy rather than reusable payload mechanics.",
-                migration_note="Move lifecycle-plan construction into a host-owned primitive registry/runtime implementation.",
-                compatibility="Retain until downstream manifests have migrated and package release notes announce removal or replacement.",
-            ),
-        },
-        {
-            "id": "payload.current-memory",
-            "kind": "transitional",
-            "owner": "host",
-            "description": "Current-memory payload policy retained for existing host-style package manifests.",
-            "target_support": {"python": "implemented", "typescript": "implemented"},
-            "transitional_retirement": _aw_transitional_retirement(
-                primitive_id="payload.current-memory",
-                target_end_state="host-owned registry behavior",
-                rationale="Current-memory views are host memory product policy, not a generic command-generation primitive.",
-                migration_note="Move current-memory selection and rendering into a host-owned primitive registry/runtime implementation.",
-                compatibility="Retain until downstream manifests have migrated and package release notes announce removal or replacement.",
-            ),
-        },
-        {
-            "id": "payload.verify",
-            "kind": "transitional",
-            "owner": "host",
-            "description": "Installed-payload verification policy retained for existing host-style package manifests.",
-            "target_support": {"python": "implemented", "typescript": "implemented"},
-            "transitional_retirement": _aw_transitional_retirement(
-                primitive_id="payload.verify",
-                target_end_state="host-owned registry behavior",
-                rationale="Installed-payload verification checks encode host compatibility and package policy.",
-                migration_note="Move verification policy into a host-owned primitive registry/runtime implementation.",
-                compatibility="Retain until downstream manifests have migrated and package release notes announce removal or replacement.",
-            ),
-        },
-        {
             "id": "output.emit",
             "kind": "portable",
             "description": "Emit JSON or compact text from a result payload.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
-        },
-        {
-            "id": "output.emit.install-result",
-            "kind": "transitional",
-            "owner": "host",
-            "description": "Installed-payload text projection retained for existing host-style package manifests.",
-            "target_support": {"python": "implemented", "typescript": "implemented"},
-            "transitional_retirement": _aw_transitional_retirement(
-                primitive_id="output.emit.install-result",
-                target_end_state="removed after downstream migration",
-                rationale="Install-result text projection is coupled to host installed-payload output shape.",
-                migration_note="Migrate generic output to output.emit and host-specific text to a host-owned formatter primitive.",
-                compatibility="Retain until downstream manifests have migrated and package release notes announce removal or replacement.",
-            ),
-        },
-        {
-            "id": "output.emit.current-memory",
-            "kind": "transitional",
-            "owner": "host",
-            "description": "Current-memory text projection retained for existing host-style package manifests.",
-            "target_support": {"python": "implemented", "typescript": "implemented"},
-            "transitional_retirement": _aw_transitional_retirement(
-                primitive_id="output.emit.current-memory",
-                target_end_state="removed after downstream migration",
-                rationale="Current-memory text projection is coupled to host memory output shape.",
-                migration_note="Migrate generic output to output.emit and host-specific text to a host-owned formatter primitive.",
-                compatibility="Retain until downstream manifests have migrated and package release notes announce removal or replacement.",
-            ),
         },
         {
             "id": "python.function.call",

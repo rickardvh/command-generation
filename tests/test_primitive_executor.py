@@ -379,8 +379,9 @@ def test_output_emit_serializes_module_result_objects(primitive_context: Primiti
     assert json.loads(contract_json)["path"] == "contract-owned/path.md"
 
 
-def test_transitional_host_owned_primitives_are_not_generic_executor_behavior(primitive_context: PrimitiveContext) -> None:
+def test_removed_transitional_primitives_are_not_generic_executor_behavior(primitive_context: PrimitiveContext) -> None:
     for primitive in (
+        "workspace.root.resolve",
         "payload.status",
         "payload.lifecycle-plan",
         "payload.current-memory",
