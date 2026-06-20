@@ -31,6 +31,16 @@ class PrimitiveContext:
             raise PrimitiveExecutionError(f"unknown primitive root: {name!r}") from exc
 
 
+def execute_host_primitive(
+    primitive: str,
+    *,
+    values: dict[str, Any],
+    arguments: dict[str, Any],
+    context: PrimitiveContext,
+) -> Any:
+    raise PrimitiveExecutionError(f"unsupported host primitive: {primitive!r}")
+
+
 def run_operation_steps(
     operation: dict[str, Any],
     *,
@@ -100,7 +110,7 @@ def execute_primitive(
         return _emit_output(values=values, arguments={"text_style": "current-memory"})
     if primitive == "python.function.call":
         return _call_python_function(values=values, arguments=arguments)
-    raise PrimitiveExecutionError(f"unsupported portable primitive: {primitive!r}")
+    return execute_host_primitive(primitive, values=values, arguments=arguments, context=context)
 
 
 def _store_step_result(*, values: dict[str, Any], outputs: Any, result: Any) -> None:
