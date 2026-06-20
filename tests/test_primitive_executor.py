@@ -329,13 +329,16 @@ def test_output_emit_serializes_module_result_objects(primitive_context: Primiti
             return {
                 "dry_run": False,
                 "message": "Installed",
+                "target_root": primitive_context.cwd,
                 "actions": [{"kind": "create", "path": "AGENTS.md"}],
             }
 
     emitted_json = execute_primitive("output.emit", values={"result": ModuleResult(), "format": "json"}, context=primitive_context)
     emitted_text = execute_primitive("output.emit", values={"result": ModuleResult(), "format": "text"}, context=primitive_context)
 
-    assert json.loads(emitted_json)["actions"][0]["path"] == "AGENTS.md"
+    emitted_payload = json.loads(emitted_json)
+    assert emitted_payload["actions"][0]["path"] == "AGENTS.md"
+    assert emitted_payload["target_root"] == str(primitive_context.cwd)
     assert "Installed" in emitted_text
     assert "- AGENTS.md" in emitted_text
 
