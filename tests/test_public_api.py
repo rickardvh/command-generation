@@ -50,7 +50,7 @@ from command_generation.target_extension import (
 from command_generation.conformance import TypescriptFunctionConformanceTarget, run_typescript_function_conformance_case
 from command_generation.primitive_executor import PrimitiveContext, execute_primitive
 from command_generation.targets.contract import PYTHON_TARGET_LAYOUT_VERSION, TYPESCRIPT_TARGET_LAYOUT_VERSION
-from command_generation.targets.python import _python_local_runtime_binding_module
+from command_generation.targets.python import _python_command_module, _python_local_runtime_binding_module, _python_runtime_handler_module
 
 
 def _maturity_policy() -> dict[str, object]:
@@ -1336,6 +1336,301 @@ def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics(
         assert cast(Callable[[], str], facade_globals["runtime_value"])() == "facade-only"
     finally:
         sys.modules.pop(source_module.__name__, None)
+
+
+def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and_help() -> None:
+    runtime_module = types.ModuleType("fake_module_front_door_runtime")
+    calls: list[list[str]] = []
+
+    def module_main(argv: list[str]) -> int:
+        calls.append(argv)
+        print("demo-module route --target repo")
+        return 7
+
+    def help_payload(target: str | None = None) -> dict[str, object]:
+        return {"kind": "demo/help/v1", "target": target}
+
+    def print_help(payload: dict[str, object]) -> None:
+        print(f"help:{payload['target']}")
+
+    setattr(runtime_module, "module_main", module_main)
+    setattr(runtime_module, "help_payload", help_payload)
+    setattr(runtime_module, "print_help", print_help)
+    sys.modules[runtime_module.__name__] = runtime_module
+    try:
+        rendered = _python_runtime_handler_module(
+            {
+                "program": "demo-cli",
+                "python_runtime_binding": {
+                    "operation_executor": {
+                        "module_file": "primitives.operation_executor",
+                        "supported_operation_ids": [],
+                    }
+                },
+            },
+            {
+                "runtime_module_handlers": [
+                    {
+                        "operation_id": "demo.front-door",
+                        "handler": "module_front_door",
+                        "command_attr": "demo_command",
+                        "module_import": runtime_module.__name__,
+                        "module_main": "module_main",
+                        "module_program": "demo-module",
+                        "help_payload_import_module": runtime_module.__name__,
+                        "help_payload_function": "help_payload",
+                        "help_text_function": "print_help",
+                        "missing_module_message": "demo module is required",
+                        "stdout_replacements": [{"old": "demo-module ", "new": "demo-cli demo "}],
+                        "positionals": [{"commands": ["route"], "attr": "route_id"}],
+                        "option_specs": [
+                            {"option": "--target", "attr": "target"},
+                            {"option": "--verbose", "attr": "verbose", "kind": "flag"},
+                            {"option": "--tag", "attr": "tags", "kind": "repeated"},
+                            {"option": "--group", "attr": "groups", "kind": "repeated_group"},
+                            {"option": "--path", "attr": "paths", "fallback_attr": "path", "kind": "repeated"},
+                        ],
+                    }
+                ]
+            },
+            source_path="demo_ir.json",
+            regenerate_command="generate-demo",
+        )
+        assert "from fake_module_front_door_runtime import module_main" not in rendered
+
+        class Parser:
+            def error(self, message: str) -> None:
+                raise AssertionError(message)
+
+        generated_package = types.ModuleType("generated_demo")
+        setattr(generated_package, "build_generated_parser", lambda: Parser())
+        setattr(generated_package, "generated_command_names", lambda: ["demo"])
+        setattr(generated_package, "generated_operation_contract", lambda operation_id: {"id": operation_id})
+        setattr(generated_package, "run_generated_command", lambda argv, handler: handler("demo.front-door", argv))
+        setattr(generated_package, "supports_generated_command", lambda command: True)
+        primitives_package = types.ModuleType("generated_demo.primitives")
+        operation_executor_module = types.ModuleType("generated_demo.primitives.operation_executor")
+        setattr(operation_executor_module, "run_operation_ir", lambda operation, args: 0)
+        sys.modules["generated_demo"] = generated_package
+        sys.modules["generated_demo.primitives"] = primitives_package
+        sys.modules["generated_demo.primitives.operation_executor"] = operation_executor_module
+        module_globals: dict[str, object] = {
+            "__name__": "generated_demo.runtime",
+            "__package__": "generated_demo",
+        }
+
+        exec(rendered, module_globals)
+
+        args = types.SimpleNamespace(demo_command=None, target="repo", format="text")
+        assert cast(Callable[[str, object], int], module_globals["_run_generated_operation"])("demo.front-door", args) == 0
+
+        args = types.SimpleNamespace(
+            demo_command="route",
+            target="repo",
+            format="json",
+            verbose=True,
+            tags=["one", "two"],
+            groups=["alpha", "beta"],
+            route_id="R1",
+            paths=[],
+            path="fallback.txt",
+        )
+        assert cast(Callable[[str, object], int], module_globals["_run_generated_operation"])("demo.front-door", args) == 7
+        assert calls == [
+            [
+                "route",
+                "R1",
+                "--target",
+                "repo",
+                "--verbose",
+                "--tag",
+                "one",
+                "--tag",
+                "two",
+                "--group",
+                "alpha",
+                "beta",
+                "--path",
+                "fallback.txt",
+            ]
+        ]
+    finally:
+        sys.modules.pop(runtime_module.__name__, None)
+        sys.modules.pop("generated_demo", None)
+        sys.modules.pop("generated_demo.primitives", None)
+        sys.modules.pop("generated_demo.primitives.operation_executor", None)
+
+
+def test_generated_module_front_door_command_uses_root_runtime_dispatcher() -> None:
+    rendered = _python_command_module(
+        {
+            "program": "demo-cli",
+            "python_runtime_binding": {
+                "runtime_module_file": "cli",
+                "operation_executor": {
+                    "module_file": "primitives.operation_executor",
+                    "supported_operation_ids": [],
+                },
+            },
+        },
+        "demo.front-door",
+        {
+            "runtime_module_handlers": [
+                {
+                    "operation_id": "demo.front-door",
+                    "handler": "module_front_door",
+                    "command_attr": "demo_command",
+                    "module_import": "demo_module.cli",
+                    "module_program": "demo-module",
+                    "help_payload_import_module": "demo_help",
+                    "help_payload_function": "help_payload",
+                    "help_text_function": "print_help",
+                    "missing_module_message": "demo module is required",
+                }
+            ]
+        },
+        source_path="demo_ir.json",
+        regenerate_command="generate-demo",
+    )
+
+    assert "from ..cli import build_generated_parser" in rendered
+    assert "command_value = getattr(args, 'demo_command', None)" in rendered
+    assert "_run_command_module" not in rendered
+
+
+def test_generated_argparse_function_call_handler_maps_args_and_emits_payload() -> None:
+    runtime_module = types.ModuleType("fake_argparse_function_runtime")
+    calls: list[dict[str, object]] = []
+
+    def resolve_target_root(target: str | None) -> str:
+        return target or "repo"
+
+    def validate_target_root(*, command_name: str, target_root: str) -> None:
+        calls.append({"validate": command_name, "target_root": target_root})
+
+    def diagnostic_profile(args: object, *, default: str) -> str:
+        return f"{default}:{getattr(args, 'profile', 'tiny')}"
+
+    def payload_function(
+        *,
+        target_root: str,
+        changed_paths: list[str],
+        dry_run: bool,
+        task_text: str | None,
+        profile: str,
+    ) -> dict[str, object]:
+        payload = {
+            "target_root": target_root,
+            "changed_paths": changed_paths,
+            "dry_run": dry_run,
+            "task_text": task_text,
+            "profile": profile,
+        }
+        calls.append(payload)
+        return payload
+
+    def emit_payload(*, payload: dict[str, object], format_name: str) -> None:
+        calls.append({"emit": format_name, "payload": payload})
+
+    setattr(runtime_module, "_resolve_target_root", resolve_target_root)
+    setattr(runtime_module, "_validate_target_root", validate_target_root)
+    setattr(runtime_module, "_diagnostic_profile", diagnostic_profile)
+    setattr(runtime_module, "payload_function", payload_function)
+    setattr(runtime_module, "_emit_payload", emit_payload)
+    sys.modules[runtime_module.__name__] = runtime_module
+    try:
+        rendered = _python_runtime_handler_module(
+            {
+                "program": "demo-cli",
+                "python_runtime_binding": {
+                    "operation_executor": {
+                        "module_file": "primitives.operation_executor",
+                        "supported_operation_ids": [],
+                    }
+                },
+            },
+            {
+                "runtime_module_handlers": [
+                    {
+                        "operation_id": "demo.report",
+                        "handler": "argparse_function_call",
+                        "import_module": runtime_module.__name__,
+                        "function": "payload_function",
+                        "support_import_module": runtime_module.__name__,
+                        "result": "emit_payload",
+                        "emit_payload": {"import_module": runtime_module.__name__, "function": "_emit_payload"},
+                        "arguments": [
+                            {
+                                "name": "target_root",
+                                "kind": "target_root",
+                                "attr": "target",
+                                "validate_command": "demo",
+                            },
+                            {"name": "changed_paths", "kind": "list_attr", "attr": "changed"},
+                            {"name": "dry_run", "kind": "bool_attr", "attr": "dry_run"},
+                            {"name": "task_text", "kind": "attr", "attr": "task"},
+                            {"name": "profile", "kind": "diagnostic_profile", "default": "tiny"},
+                        ],
+                    }
+                ]
+            },
+            source_path="demo_ir.json",
+            regenerate_command="generate-demo",
+        )
+
+        generated_package = types.ModuleType("generated_argparse_demo")
+        setattr(generated_package, "build_generated_parser", lambda: object())
+        setattr(generated_package, "generated_command_names", lambda: ["demo"])
+        setattr(generated_package, "generated_operation_contract", lambda operation_id: {"id": operation_id})
+        setattr(generated_package, "run_generated_command", lambda argv, handler: handler("demo.report", argv))
+        setattr(generated_package, "supports_generated_command", lambda command: True)
+        primitives_package = types.ModuleType("generated_argparse_demo.primitives")
+        operation_executor_module = types.ModuleType("generated_argparse_demo.primitives.operation_executor")
+        setattr(operation_executor_module, "run_operation_ir", lambda operation, args: 0)
+        sys.modules["generated_argparse_demo"] = generated_package
+        sys.modules["generated_argparse_demo.primitives"] = primitives_package
+        sys.modules["generated_argparse_demo.primitives.operation_executor"] = operation_executor_module
+        module_globals: dict[str, object] = {
+            "__name__": "generated_argparse_demo.runtime",
+            "__package__": "generated_argparse_demo",
+        }
+
+        exec(rendered, module_globals)
+        args = types.SimpleNamespace(
+            target="repo",
+            changed=["a.py", "b.py"],
+            dry_run=True,
+            task="shape",
+            profile="full",
+            format="json",
+        )
+
+        assert cast(Callable[[str, object], int], module_globals["_run_generated_operation"])("demo.report", args) == 0
+        assert calls == [
+            {"validate": "demo", "target_root": "repo"},
+            {
+                "target_root": "repo",
+                "changed_paths": ["a.py", "b.py"],
+                "dry_run": True,
+                "task_text": "shape",
+                "profile": "tiny:full",
+            },
+            {
+                "emit": "json",
+                "payload": {
+                    "target_root": "repo",
+                    "changed_paths": ["a.py", "b.py"],
+                    "dry_run": True,
+                    "task_text": "shape",
+                    "profile": "tiny:full",
+                },
+            },
+        ]
+    finally:
+        sys.modules.pop(runtime_module.__name__, None)
+        sys.modules.pop("generated_argparse_demo", None)
+        sys.modules.pop("generated_argparse_demo.primitives", None)
+        sys.modules.pop("generated_argparse_demo.primitives.operation_executor", None)
 
 
 def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> None:
