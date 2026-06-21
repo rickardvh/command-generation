@@ -161,6 +161,12 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "target_support": {"python": "implemented", "typescript": "implemented"},
         },
         {
+            "id": "payload.project",
+            "kind": "portable",
+            "description": "Project exact dot-path selectors from a payload into a generic selected-output wrapper.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
             "id": "output.emit",
             "kind": "portable",
             "description": "Emit JSON or compact text from a result payload.",

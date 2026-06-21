@@ -122,6 +122,15 @@ def main() -> int:
         assert skill_payload["actions"][0]["path"] == "review"
         assert skill_payload["actions"][0]["source"] == "review"
 
+        selected_payload = execute_primitive(
+            "payload.project",
+            values={"result": skill_payload, "select": "actions.0.path,message,missing"},
+            arguments={"source_command": "fixture.skills"},
+            context=context,
+        )
+        assert selected_payload["values"] == {"actions.0.path": "review", "message": "Skills"}
+        assert selected_payload["missing"] == ["missing"]
+
         emitted_json = execute_primitive(
             "output.emit",
             values={"result": skill_payload, "format": "json"},

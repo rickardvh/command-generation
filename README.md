@@ -33,6 +33,8 @@ Built-in primitive definitions carry a `kind` classification:
 
 The exported `BUILTIN_PORTABLE_PRIMITIVES` registry contains package-owned portable primitives plus the explicit host-owned bridge IDs that generated runtimes may call when the host supplies support modules. It does not carry product-shaped transitional compatibility primitives.
 
+`payload.project` is the generic projection primitive for exact dot-path selected-output wrappers. See [Projection primitives](docs/projection-primitives.md) for its ownership boundary.
+
 ## Public API
 
 - `load_command_package_ir(path, schema_path=None)` validates IR against the package-owned schema.
