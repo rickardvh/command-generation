@@ -22,7 +22,7 @@ Package-affecting PRs must have exactly one semver label: `semver:major`, `semve
 
 After a package-affecting PR merges to `master`, CI reads the merged PR label, bumps `project.version` in `pyproject.toml`, updates `uv.lock`, reruns tests and lint, rebuilds wheel/sdist artifacts, proves wheel installation from `dist/`, commits `Release vMAJOR.MINOR.PATCH`, pushes the matching tag, and attaches the artifacts to the GitHub Release.
 
-If a merged package-affecting PR explicitly sets `project.version` to a prerelease `MAJOR.MINOR.PATCHrcN` version, CI releases that exact version and marks the GitHub Release as a prerelease instead of computing an additional semver bump.
+If a merged package-affecting PR explicitly sets `project.version` to a prerelease `MAJOR.MINOR.PATCHrcN` version, CI releases that exact version and marks the GitHub Release as a prerelease instead of computing an additional semver bump when the matching prerelease tag does not exist. If the prerelease tag already exists, the release resolver applies the merged PR's semver label instead; `semver:patch` promotes the prerelease base to the stable `MAJOR.MINOR.PATCH` version.
 
 Direct package-affecting pushes to `master` do not have PR labels to inspect. They may still publish a release when the push explicitly changes `project.version` in `pyproject.toml` to an unreleased `MAJOR.MINOR.PATCH` version. In that path CI uses the explicit version, refreshes `uv.lock`, proves the artifact, tags the existing commit, and publishes the GitHub Release.
 

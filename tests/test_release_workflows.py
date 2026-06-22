@@ -81,6 +81,9 @@ def test_master_release_workflow_bumps_from_merged_pr_label() -> None:
     assert "MAJOR.MINOR.PATCHrcN" in workflow
     assert "declares prerelease version" in workflow
     assert "releasing it without another bump" in workflow
+    assert "def next_version_from_label" in workflow
+    assert "Prerelease tag {tag} already exists; applying" in workflow
+    assert 'return f"{major}.{minor}.{patch}"' in workflow
     assert "Package-affecting direct push did not change pyproject.toml" in workflow
     assert 'output("release_needed", "false")' in workflow
     assert "set_release_outputs(current_version)" in workflow
