@@ -83,6 +83,16 @@ jobs:
               output("version", version)
               output("tag", f"v{version}")
 
+          def next_version_from_label(version: str, label: str) -> str:
+              major, minor, patch, prerelease = parse_version(version)
+              if label == "semver:major":
+                  return f"{major + 1}.0.0"
+              if label == "semver:minor":
+                  return f"{major}.{minor + 1}.0"
+              if prerelease:
+                  return f"{major}.{minor}.{patch}"
+              return f"{major}.{minor}.{patch + 1}"
+
           message = os.environ["HEAD_COMMIT_MESSAGE"]
           if os.environ["GITHUB_ACTOR"] == "github-actions[bot]" and re.match(r"^Release v\d+\.\d+\.\d+(?:rc\d+)?$", message.strip()):
               print("Release bump commit detected; no additional release bump needed.")
@@ -147,27 +157,16 @@ jobs:
           major, minor, patch, prerelease = parse_version(current_version)
           if prerelease:
               tag = f"v{current_version}"
-              if run("git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False).returncode == 0:
-                  print(f"Release tag {tag} already exists.", file=sys.stderr)
-                  raise SystemExit(1)
-              print(f"PR #{pr_number} declares prerelease version {current_version}; releasing it without another bump.")
-              set_release_outputs(current_version)
-              output("pr_number", pr_number)
-              output("semver_label", selected[0])
-              raise SystemExit(0)
+              if run("git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False).returncode != 0:
+                  print(f"PR #{pr_number} declares prerelease version {current_version}; releasing it without another bump.")
+                  set_release_outputs(current_version)
+                  output("pr_number", pr_number)
+                  output("semver_label", selected[0])
+                  raise SystemExit(0)
+              print(f"Prerelease tag {tag} already exists; applying {selected[0]} to compute the next release.")
 
           label = selected[0]
-          if label == "semver:major":
-              major += 1
-              minor = 0
-              patch = 0
-          elif label == "semver:minor":
-              minor += 1
-              patch = 0
-          else:
-              patch += 1
-
-          next_version = f"{major}.{minor}.{patch}"
+          next_version = next_version_from_label(current_version, label)
           tag = f"v{next_version}"
           if run("git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False).returncode == 0:
               print(f"Release tag {tag} already exists.", file=sys.stderr)
