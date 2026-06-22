@@ -251,6 +251,52 @@ def test_payload_assemble_supports_template_field_selectors(primitive_context: P
     assert payload == {"status": "present", "nested": {"note_count": 3, "required_count": 1}}
 
 
+def test_payload_project_selects_exact_paths_and_reports_missing(primitive_context: PrimitiveContext) -> None:
+    result = execute_primitive(
+        "payload.project",
+        values={
+            "operation_id": "fixture.show",
+            "select": "items.0.name,summary.count,missing.value",
+            "result": {
+                "summary": {"count": 2},
+                "items": [{"name": "alpha"}, {"name": "beta"}],
+            },
+        },
+        context=primitive_context,
+    )
+
+    assert result["kind"] == "command-generation/selected-output/v1"
+    assert result["source_command"] == "fixture.show"
+    assert result["values"] == {"items.0.name": "alpha", "summary.count": 2}
+    assert result["missing"] == ["missing.value"]
+    assert "items.1.name" in result["available_selectors"]
+
+
+def test_payload_project_can_use_declared_selector_list(primitive_context: PrimitiveContext) -> None:
+    result = execute_primitive(
+        "payload.project",
+        values={
+            "payload": {
+                "status": "ready",
+                "details": {"owner": "fixture"},
+            }
+        },
+        arguments={
+            "source": "payload",
+            "source_command": "fixture.status",
+            "selectors": ["status", "details.owner"],
+            "selected_output_kind": "fixture/selected-output/v1",
+        },
+        context=primitive_context,
+    )
+
+    assert result == {
+        "kind": "fixture/selected-output/v1",
+        "source_command": "fixture.status",
+        "values": {"status": "ready", "details.owner": "fixture"},
+    }
+
+
 def test_operation_fragments_compose_reusable_step_groups(primitive_context: PrimitiveContext) -> None:
     operation = {
         "id": "fixture.report",
@@ -292,6 +338,39 @@ def test_operation_fragments_compose_reusable_step_groups(primitive_context: Pri
     )
 
     assert json.loads(values["emitted"]) == {"status": "ok"}
+
+
+def test_run_operation_steps_can_project_payload_fields(primitive_context: PrimitiveContext) -> None:
+    operation = {
+        "id": "fixture.project",
+        "ir_plan": {
+            "steps": [
+                {
+                    "id": "make_result",
+                    "uses": "fixture.make-result",
+                    "outputs": ["result"],
+                },
+                {
+                    "id": "project",
+                    "uses": "payload.project",
+                    "arguments": {
+                        "selectors": ["summary.status"],
+                        "source_command": "fixture.project",
+                    },
+                    "outputs": ["selected"],
+                },
+            ]
+        },
+    }
+
+    values = run_operation_steps(
+        operation,
+        initial_values={},
+        context=primitive_context,
+        handlers={"fixture.make-result": lambda values, arguments, context: {"summary": {"status": "ready"}}},
+    )
+
+    assert values["selected"]["values"] == {"summary.status": "ready"}
 
 
 def test_operation_fragments_reject_cycles(primitive_context: PrimitiveContext) -> None:
