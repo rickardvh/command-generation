@@ -1198,6 +1198,34 @@ def test_non_aw_fixture_typescript_cli_covers_nested_required_positional_and_app
     assert payload["tags"] == ["docs", "tests"]
 
 
+def test_typescript_generated_test_uses_valid_required_subcommand_sample_invocations(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for generated TypeScript test execution")
+
+    generate_command_packages(
+        _fixture_manifest_with_nested_cli_shapes(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    test_source = (tmp_path / "todo_ts_pkg" / "test" / "command-package.test.mjs").read_text(encoding="utf-8")
+    result = subprocess.run(
+        ["node", "--test", "test/command-package.test.mjs"],
+        cwd=tmp_path / "todo_ts_pkg",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert '["list", "project", "alpha", "--priority", "high", "--format", "json"]' in test_source
+    assert '["list", "project", "__SPACED_TARGET__", "--priority", "high"]' in test_source
+    assert "generated runnable adapter rejects command without required subcommand" in test_source
+    assert "missing subcommand for list" in test_source
+    assert result.returncode == 0, result.stderr
+
+
 def test_non_aw_fixture_typescript_cli_validates_required_nested_option(tmp_path: Path) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")

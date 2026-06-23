@@ -905,18 +905,129 @@ def _typescript_required_option_case(package: dict[str, Any]) -> dict[str, Any] 
     return None
 
 
+def _typescript_sample_value(spec: dict[str, Any], *, fallback: str) -> str:
+    choices = spec.get("choices", [])
+    if isinstance(choices, list) and choices:
+        preferred_by_name = {
+            "format": "json",
+            "priority": "high",
+        }
+        preferred = preferred_by_name.get(str(spec.get("name", "")))
+        if preferred in choices:
+            return preferred
+        default = spec.get("default")
+        if default in choices:
+            return str(default)
+        return str(choices[0])
+    default = spec.get("default")
+    if isinstance(default, str) and default:
+        return default
+    sample_by_name = {
+        "project": "alpha",
+        "target": ".",
+        "target_root": ".",
+    }
+    return sample_by_name.get(str(spec.get("name", "")), fallback)
+
+
+def _typescript_option_flag(option: dict[str, Any]) -> str:
+    flags = option.get("flags", [])
+    if isinstance(flags, list) and flags:
+        return str(flags[0])
+    name = str(option.get("name", "")).strip()
+    return f"--{name.replace('_', '-')}" if name else ""
+
+
+def _typescript_sample_invocations(command: dict[str, Any]) -> dict[str, Any]:
+    command_name = str(command.get("command", {}).get("name", "")).strip()
+    interface = command.get("interface", {})
+    if not command_name or not isinstance(interface, dict):
+        return {"json_args": [], "spaced_args": [], "path": [], "requires_subcommand": False, "format_path": []}
+    path = [command_name]
+    current = interface
+    requires_subcommand = False
+    while True:
+        subcommands = [item for item in current.get("subcommands", []) if isinstance(item, dict)]
+        subcommands_required = bool(subcommands and current.get("subcommands_required") is not False)
+        if not subcommands_required:
+            break
+        first_subcommand = sorted(subcommands, key=lambda item: str(item.get("name", "")))[0]
+        subcommand_name = str(first_subcommand.get("name", "")).strip()
+        if not subcommand_name:
+            break
+        path.append(subcommand_name)
+        current = first_subcommand
+        requires_subcommand = True
+
+    required_positionals = [
+        item
+        for item in current.get("arguments", [])
+        if isinstance(item, dict) and item.get("nargs") != "?" and item.get("default") is None
+    ]
+    required_options = [item for item in current.get("options", []) if isinstance(item, dict) and item.get("required") is True]
+    json_args = list(path)
+    spaced_args: list[str] = []
+    spaced_arg_index: int | None = None
+    for argument in required_positionals:
+        value = _typescript_sample_value(argument, fallback=str(argument.get("name") or "value"))
+        if spaced_arg_index is None:
+            spaced_arg_index = len(json_args)
+        json_args.append(value)
+    for option in required_options:
+        flag = _typescript_option_flag(option)
+        if not flag:
+            continue
+        value = _typescript_sample_value(option, fallback="value")
+        if spaced_arg_index is None and option.get("action") not in {"store_true"}:
+            spaced_arg_index = len(json_args) + 1
+        json_args.extend([flag, value])
+    if spaced_arg_index is not None:
+        spaced_args = list(json_args)
+        spaced_args[spaced_arg_index] = "__SPACED_TARGET__"
+    format_option = next(
+        (
+            item
+            for item in current.get("options", [])
+            if isinstance(item, dict) and item.get("name") == "format" and _typescript_option_flag(item)
+        ),
+        None,
+    )
+    format_path = list(json_args)
+    if format_option is not None:
+        json_args.extend([_typescript_option_flag(format_option), _typescript_sample_value(format_option, fallback="json")])
+    dry_run_option = next(
+        (
+            item
+            for item in current.get("options", [])
+            if isinstance(item, dict) and item.get("name") == "dry_run" and _typescript_option_flag(item)
+        ),
+        None,
+    )
+    if dry_run_option is not None:
+        flag = _typescript_option_flag(dry_run_option)
+        json_args.insert(len(path), flag)
+        if spaced_args:
+            spaced_args.insert(len(path), flag)
+    return {
+        "json_args": json_args,
+        "spaced_args": spaced_args,
+        "path": path,
+        "requires_subcommand": requires_subcommand,
+        "format_path": format_path,
+    }
+
+
 def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
     expected_commands = sorted(command["command"]["name"] for command in package["commands"])
     rendered_expected = json.dumps(expected_commands)
     sample_command = expected_commands[0]
     sample_command_record = next(command for command in package["commands"] if command["command"]["name"] == sample_command)
-    sample_options = sample_command_record.get("interface", {}).get("options", [])
-    sample_supports_dry_run = any(isinstance(option, dict) and option.get("name") == "dry_run" for option in sample_options)
-    sample_json_args = [sample_command, "--format", "json"]
-    sample_spaced_args = [sample_command, "--target", "__SPACED_TARGET__"]
-    if sample_supports_dry_run:
-        sample_json_args.insert(1, "--dry-run")
-        sample_spaced_args.insert(1, "--dry-run")
+    sample_invocations = _typescript_sample_invocations(sample_command_record)
+    sample_path = sample_invocations["path"]
+    sample_requires_subcommand = bool(sample_invocations["requires_subcommand"])
+    sample_json_args = sample_invocations["json_args"]
+    sample_spaced_args = sample_invocations["spaced_args"]
+    sample_format_path = sample_invocations["format_path"]
     required_case = _typescript_required_option_case(package)
     runnable = _is_runnable_typescript_target(target)
     expected_maturity = target["maturity_level_ref"]
@@ -984,20 +1095,37 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
             "  assert.equal(typeof payload, 'object');\n"
             "  assert.equal(result.stderr, '');\n"
             "});\n"
-            "\n"
-            "test('generated runnable adapter preserves spaced argv values during native execution', () => {\n"
-            "  const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));\n"
-            "  const spacedTarget = fileURLToPath(new URL('../tmp target with spaces', import.meta.url));\n"
-            "  mkdirSync(spacedTarget, { recursive: true });\n"
-            "  try {\n"
-            f"    const args = {json.dumps(sample_spaced_args)}.map((token) => token === '__SPACED_TARGET__' ? spacedTarget : token);\n"
-            "    const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });\n"
-            "    assert.equal(result.status, 0);\n"
-            "    assert.doesNotMatch(result.stderr, /runtime handoff/i);\n"
-            "  } finally {\n"
-            "    rmSync(spacedTarget, { recursive: true, force: true });\n"
-            "  }\n"
-            "});\n"
+        )
+        if sample_spaced_args:
+            body += (
+                "\n"
+                "test('generated runnable adapter preserves spaced argv values during native execution', () => {\n"
+                "  const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));\n"
+                "  const spacedTarget = fileURLToPath(new URL('../tmp target with spaces', import.meta.url));\n"
+                "  mkdirSync(spacedTarget, { recursive: true });\n"
+                "  try {\n"
+                f"    const args = {json.dumps(sample_spaced_args)}.map((token) => token === '__SPACED_TARGET__' ? spacedTarget : token);\n"
+                "    const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });\n"
+                "    assert.equal(result.status, 0);\n"
+                "    assert.doesNotMatch(result.stderr, /runtime handoff/i);\n"
+                "  } finally {\n"
+                "    rmSync(spacedTarget, { recursive: true, force: true });\n"
+                "  }\n"
+                "});\n"
+            )
+        if sample_requires_subcommand:
+            body += (
+                "\n"
+                "test('generated runnable adapter rejects command without required subcommand', () => {\n"
+                "  const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));\n"
+                f"  const result = spawnSync(process.execPath, [cli, ...{json.dumps([sample_command])}], {{ encoding: 'utf8' }});\n"
+                "  assert.equal(result.status, 2);\n"
+                "  assert.equal(result.stdout, '');\n"
+                f"  assert.match(result.stderr, /missing subcommand for {sample_command}/);\n"
+                "  assert.doesNotMatch(result.stderr, /runtime handoff/i);\n"
+                "});\n"
+            )
+        body += (
             "\n"
             "test('generated runnable adapter exposes routing status and recovery guidance', () => {\n"
             "  const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));\n"
@@ -1011,7 +1139,7 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
             "\n"
             "test('generated runnable adapter renders command help without executing runtime', () => {\n"
             "  const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));\n"
-            f"  const result = spawnSync(process.execPath, [cli, {sample_command!r}, '--help'], {{\n"
+            f"  const result = spawnSync(process.execPath, [cli, ...{json.dumps(sample_path)}, '--help'], {{\n"
             "    encoding: 'utf8',\n"
             "  });\n"
             "  assert.equal(result.status, 0);\n"
@@ -1021,7 +1149,7 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
             "\n"
             "test('generated runnable adapter validates choices before command execution', () => {\n"
             "  const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));\n"
-            f"  const result = spawnSync(process.execPath, [cli, {sample_command!r}, '--format', '__invalid__'], {{\n"
+            f"  const result = spawnSync(process.execPath, [cli, ...{json.dumps(sample_format_path)}, '--format', '__invalid__'], {{\n"
             "    encoding: 'utf8',\n"
             "  });\n"
             "  assert.equal(result.status, 2);\n"
