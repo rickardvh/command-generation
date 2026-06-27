@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -487,6 +489,67 @@ def test_python_function_call_resolves_checked_in_arguments(primitive_context: P
     )
 
     assert result == {"status": "ok"}
+
+
+def test_operation_call_maps_positional_keyword_and_coerced_values(primitive_context: PrimitiveContext) -> None:
+    runtime_module = types.ModuleType("fixture_operation_runtime")
+    calls: list[dict[str, object]] = []
+
+    def archive_operation(
+        target: str,
+        payload: dict[str, object],
+        *,
+        dry_run: bool,
+        retain_archive: bool,
+        mode: str,
+    ) -> dict[str, object]:
+        call = {
+            "target": target,
+            "payload": payload,
+            "dry_run": dry_run,
+            "retain_archive": retain_archive,
+            "mode": mode,
+        }
+        calls.append(call)
+        return call
+
+    setattr(runtime_module, "archive_operation", archive_operation)
+    sys.modules[runtime_module.__name__] = runtime_module
+    try:
+        result = execute_primitive(
+            "operation.call",
+            values={
+                "target": "",
+                "payload": {"id": "P1"},
+                "dry_run": "yes",
+                "discard_archive": True,
+            },
+            arguments={
+                "import_module": runtime_module.__name__,
+                "function": "archive_operation",
+                "args": [
+                    {"string_value": "target", "default": "."},
+                    {"raw_value": "payload"},
+                ],
+                "kwargs": {
+                    "dry_run": {"bool_value": "dry_run"},
+                    "retain_archive": {"not_bool_value": "discard_archive"},
+                    "mode": {"literal": "fast"},
+                },
+            },
+            context=primitive_context,
+        )
+    finally:
+        sys.modules.pop(runtime_module.__name__, None)
+
+    assert result == {
+        "target": ".",
+        "payload": {"id": "P1"},
+        "dry_run": True,
+        "retain_archive": False,
+        "mode": "fast",
+    }
+    assert calls == [result]
 
 
 def test_python_function_call_rejects_unresolved_targets(primitive_context: PrimitiveContext) -> None:

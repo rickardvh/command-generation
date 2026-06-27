@@ -2177,6 +2177,7 @@ def test_primitive_registry_round_trips_host_metadata() -> None:
 def test_builtin_registry_declares_portable_primitives() -> None:
     assert "filesystem.read" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "payload.project" in BUILTIN_PORTABLE_PRIMITIVES.ids()
+    assert "operation.call" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "output.emit" in BUILTIN_PORTABLE_PRIMITIVES.ids()
 
 
@@ -2187,6 +2188,9 @@ def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
     assert definitions["filesystem.read"]["kind"] == "portable"
     assert definitions["json.parse"]["kind"] == "portable"
     assert definitions["payload.project"]["kind"] == "portable"
+    assert definitions["operation.call"]["kind"] == "host-owned"
+    assert definitions["operation.call"]["target_support"]["python"] == "implemented"
+    assert definitions["operation.call"]["target_support"]["typescript"] == "unsupported"
     assert definitions["python.function.call"]["kind"] == "host-owned"
     assert definitions["typescript.domain.execute"]["kind"] == "host-owned"
 

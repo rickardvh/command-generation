@@ -173,6 +173,15 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "target_support": {"python": "implemented", "typescript": "implemented"},
         },
         {
+            "id": "operation.call",
+            "kind": "host-owned",
+            "description": "Call an explicit package-owned operation function through generated value mapping.",
+            "target_support": {"python": "implemented", "typescript": "unsupported"},
+            "unsupported_targets": {
+                "typescript": "operation.call imports Python package functions; TypeScript targets need a host-owned bridge primitive.",
+            },
+        },
+        {
             "id": "python.function.call",
             "kind": "host-owned",
             "description": "Host-provided Python callable bridge.",
