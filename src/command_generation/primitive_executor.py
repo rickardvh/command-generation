@@ -101,6 +101,8 @@ def execute_primitive(
         return _toml_table_counts(values=values, arguments=arguments, context=context)
     if primitive == "payload.assemble":
         return _assemble_payload(values=values, arguments=arguments)
+    if primitive == "payload.view":
+        return _view_payload(values=values, arguments=arguments)
     if primitive == "payload.project":
         return _project_payload(values=values, arguments=arguments)
     if primitive == "output.emit":
@@ -297,6 +299,8 @@ def _assemble_payload(
         return _resolve_template(fields["template"], values=values)
     if fields.get("payload_kind") == "package-file-list":
         return _assemble_package_file_list(values=values, fields=fields)
+    if fields.get("payload_kind") == "package-resource-manifest":
+        return _assemble_package_resource_manifest(values=values, fields=fields)
     actions_from = str(fields.get("actions_from", ""))
     payload: dict[str, Any] = {
         "dry_run": bool(fields.get("dry_run", True)),
@@ -379,6 +383,59 @@ def _assemble_package_file_list(
     }
 
 
+def _assemble_package_resource_manifest(
+    *, values: dict[str, Any], fields: Mapping[str, Any]
+) -> dict[str, Any]:
+    manifest_from = str(fields.get("manifest_from", "manifest"))
+    manifest = values.get(manifest_from, {})
+    if not isinstance(manifest, Mapping):
+        raise PrimitiveExecutionError(f"{manifest_from} must be an object")
+    files_path = str(fields.get("files_path", "files"))
+    bundled_skills_path = str(
+        fields.get("bundled_skill_files_path", "bundled_skill_files")
+    )
+    files = _resolve_dotted_value(manifest, files_path)
+    bundled_skill_files = _resolve_dotted_value(manifest, bundled_skills_path)
+    return {
+        "files": _manifest_path_list(files or [], source=f"{manifest_from}.{files_path}"),
+        "default_files": _string_list(
+            fields.get("default_files", []),
+            source="payload.assemble fields.default_files",
+        ),
+        "optional_files": _string_list(
+            fields.get("optional_files", []),
+            source="payload.assemble fields.optional_files",
+        ),
+        "bundled_skill_files": _manifest_path_list(
+            bundled_skill_files or [],
+            source=f"{manifest_from}.{bundled_skills_path}",
+        ),
+        "optional_enable_commands": _string_list(
+            fields.get("optional_enable_commands", []),
+            source="payload.assemble fields.optional_enable_commands",
+        ),
+    }
+
+
+def _manifest_path_list(value: Any, *, source: str) -> list[str]:
+    if not isinstance(value, list):
+        raise PrimitiveExecutionError(f"{source} must be a list")
+    paths: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            paths.append(item)
+            continue
+        if isinstance(item, Mapping):
+            raw_path = item.get("relative_path", item.get("path"))
+            if isinstance(raw_path, str):
+                paths.append(raw_path)
+                continue
+        raise PrimitiveExecutionError(
+            f"{source} entries must be strings or objects with path"
+        )
+    return paths
+
+
 def _string_list(value: Any, *, source: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise PrimitiveExecutionError(f"{source} must be a list of strings")
@@ -433,6 +490,29 @@ def _resolve_template(template: Any, *, values: dict[str, Any]) -> Any:
                 )
             value = value[part]
         return value
+    if "$select_by_value" in template:
+        spec = template["$select_by_value"]
+        if not isinstance(spec, dict):
+            raise PrimitiveExecutionError("template $select_by_value must be an object")
+        choices = spec.get("choices", {})
+        if not isinstance(choices, Mapping):
+            raise PrimitiveExecutionError(
+                "template $select_by_value choices must be an object"
+            )
+        value_name = str(spec.get("value", ""))
+        selected_value = values.get(value_name)
+        selected_key = (
+            _template_choice_key(selected_value)
+            if value_name in values and selected_value is not None
+            else _template_choice_key(spec.get("default", ""))
+        )
+        if selected_key not in choices:
+            selected_key = _template_choice_key(spec.get("default", ""))
+        if selected_key not in choices:
+            raise PrimitiveExecutionError(
+                f"template $select_by_value cannot resolve choice for {value_name!r}"
+            )
+        return _resolve_template(choices[selected_key], values=values)
     if set(template) == {"$count"}:
         counted = values.get(str(template["$count"]), [])
         if not isinstance(counted, Sequence) or isinstance(counted, (str, bytes)):
@@ -474,6 +554,12 @@ def _resolve_template(template: Any, *, values: dict[str, Any]) -> Any:
     }
 
 
+def _template_choice_key(value: Any) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
 def _emit_output(
     *, values: dict[str, Any], arguments: dict[str, Any] | None = None
 ) -> str:
@@ -513,6 +599,42 @@ def _emit_output(
         label = action.get("path") or action.get("id") or action.get("kind")
         lines.append(f"- {label}")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _view_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    source_name = str(arguments.get("source") or "result")
+    if source_name not in values:
+        raise PrimitiveExecutionError(f"payload.view source value is missing: {source_name!r}")
+    fields = _string_list(arguments.get("fields", []), source="payload.view fields")
+    limits = arguments.get("limits", {})
+    if not isinstance(limits, Mapping):
+        raise PrimitiveExecutionError("payload.view limits must be an object")
+    payload = values[source_name]
+    viewed: dict[str, Any] = {
+        "kind": str(arguments.get("view_kind") or "command-generation/payload-view/v1"),
+        "source_command": str(arguments.get("source_command") or values.get("operation_id") or ""),
+        "values": {},
+    }
+    missing: list[str] = []
+    for field_name in fields:
+        found, value = _field_by_path(payload, field_name)
+        if not found:
+            missing.append(field_name)
+            continue
+        cast(dict[str, Any], viewed["values"])[field_name] = _limited_view_value(
+            _plain_output_result(value), limit=limits.get(field_name)
+        )
+    if missing:
+        viewed["missing"] = missing
+    return viewed
+
+
+def _limited_view_value(value: Any, *, limit: Any) -> Any:
+    if not isinstance(limit, int) or isinstance(value, (str, bytes, bytearray)):
+        return value
+    if isinstance(value, Sequence):
+        return list(value[: max(limit, 0)])
+    return value
 
 
 def _project_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:

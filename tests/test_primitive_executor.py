@@ -253,6 +253,127 @@ def test_payload_assemble_supports_template_field_selectors(primitive_context: P
     assert payload == {"status": "present", "nested": {"note_count": 3, "required_count": 1}}
 
 
+def test_payload_assemble_selects_templates_by_declared_mode(primitive_context: PrimitiveContext) -> None:
+    payload = execute_primitive(
+        "payload.assemble",
+        values={"mode": "compact", "items": ["a", "b", "c"]},
+        arguments={
+            "fields": {
+                "template": {
+                    "$select_by_value": {
+                        "value": "mode",
+                        "default": "full",
+                        "choices": {
+                            "compact": {"summary": {"$count": "items"}},
+                            "full": {"summary": {"$value": "count"}},
+                        },
+                    }
+                }
+            }
+        },
+        context=primitive_context,
+    )
+
+    assert payload == {"summary": 3}
+
+
+def test_payload_assemble_selects_falsy_declared_mode_values(primitive_context: PrimitiveContext) -> None:
+    payload = execute_primitive(
+        "payload.assemble",
+        values={"mode": False},
+        arguments={
+            "fields": {
+                "template": {
+                    "$select_by_value": {
+                        "value": "mode",
+                        "default": "fallback",
+                        "choices": {
+                            "false": {"selected": "false-key"},
+                            "fallback": {"selected": "fallback-key"},
+                        },
+                    }
+                }
+            }
+        },
+        context=primitive_context,
+    )
+
+    assert payload == {"selected": "false-key"}
+
+
+def test_payload_assemble_builds_package_resource_manifest_payload(primitive_context: PrimitiveContext) -> None:
+    payload = execute_primitive(
+        "payload.assemble",
+        values={
+            "manifest": {
+                "resources": {
+                    "files": [{"path": "required.md"}, "optional.md"],
+                    "skills": [{"relative_path": "skill/SKILL.md"}],
+                }
+            }
+        },
+        arguments={
+            "fields": {
+                "payload_kind": "package-resource-manifest",
+                "files_path": "resources.files",
+                "bundled_skill_files_path": "resources.skills",
+                "default_files": ["required.md"],
+                "optional_files": ["optional.md"],
+                "optional_enable_commands": ["fixture install --optional"],
+            }
+        },
+        context=primitive_context,
+    )
+
+    assert payload == {
+        "files": ["required.md", "optional.md"],
+        "default_files": ["required.md"],
+        "optional_files": ["optional.md"],
+        "bundled_skill_files": ["skill/SKILL.md"],
+        "optional_enable_commands": ["fixture install --optional"],
+    }
+
+
+def test_payload_view_projects_allowlisted_fields_with_limits(primitive_context: PrimitiveContext) -> None:
+    view = execute_primitive(
+        "payload.view",
+        values={
+            "operation_id": "fixture.report",
+            "result": {
+                "status": "ready",
+                "actions": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
+                "internal": "hidden",
+            },
+        },
+        arguments={
+            "fields": ["status", "actions", "missing"],
+            "limits": {"actions": 2},
+            "view_kind": "fixture/view/v1",
+        },
+        context=primitive_context,
+    )
+
+    assert view == {
+        "kind": "fixture/view/v1",
+        "source_command": "fixture.report",
+        "values": {
+            "status": "ready",
+            "actions": [{"id": "a"}, {"id": "b"}],
+        },
+        "missing": ["missing"],
+    }
+
+
+def test_payload_view_rejects_non_object_limits(primitive_context: PrimitiveContext) -> None:
+    with pytest.raises(PrimitiveExecutionError, match="payload.view limits must be an object"):
+        execute_primitive(
+            "payload.view",
+            values={"result": {"status": "ready"}},
+            arguments={"fields": ["status"], "limits": ["bad"]},
+            context=primitive_context,
+        )
+
+
 def test_payload_project_selects_exact_paths_and_reports_missing(primitive_context: PrimitiveContext) -> None:
     result = execute_primitive(
         "payload.project",
