@@ -500,9 +500,14 @@ def _resolve_template(template: Any, *, values: dict[str, Any]) -> Any:
                 "template $select_by_value choices must be an object"
             )
         value_name = str(spec.get("value", ""))
-        selected_key = str(values.get(value_name) or spec.get("default", ""))
+        selected_value = values.get(value_name)
+        selected_key = (
+            _template_choice_key(selected_value)
+            if value_name in values and selected_value is not None
+            else _template_choice_key(spec.get("default", ""))
+        )
         if selected_key not in choices:
-            selected_key = str(spec.get("default", ""))
+            selected_key = _template_choice_key(spec.get("default", ""))
         if selected_key not in choices:
             raise PrimitiveExecutionError(
                 f"template $select_by_value cannot resolve choice for {value_name!r}"
@@ -547,6 +552,12 @@ def _resolve_template(template: Any, *, values: dict[str, Any]) -> Any:
         str(key): _resolve_template(value, values=values)
         for key, value in template.items()
     }
+
+
+def _template_choice_key(value: Any) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
 
 
 def _emit_output(
@@ -605,13 +616,13 @@ def _view_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> dict[
         "values": {},
     }
     missing: list[str] = []
-    for field in fields:
-        found, value = _field_by_path(payload, field)
+    for field_name in fields:
+        found, value = _field_by_path(payload, field_name)
         if not found:
-            missing.append(field)
+            missing.append(field_name)
             continue
-        cast(dict[str, Any], viewed["values"])[field] = _limited_view_value(
-            _plain_output_result(value), limit=limits.get(field)
+        cast(dict[str, Any], viewed["values"])[field_name] = _limited_view_value(
+            _plain_output_result(value), limit=limits.get(field_name)
         )
     if missing:
         viewed["missing"] = missing

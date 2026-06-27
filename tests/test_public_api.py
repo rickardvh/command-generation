@@ -1193,6 +1193,112 @@ def test_non_aw_fixture_typescript_payload_view_primitive(tmp_path: Path) -> Non
     assert payload["values"]["items"] == [{"title": "Write test"}]
 
 
+def test_non_aw_fixture_typescript_select_by_value_preserves_falsy_keys(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    operation["ir_plan"]["steps"] = [
+        {
+            "id": "assemble",
+            "uses": "payload.assemble",
+            "arguments": {
+                "fields": {
+                    "template": {
+                        "$select_by_value": {
+                            "value": "mode",
+                            "default": "fallback",
+                            "choices": {
+                                "false": {"selected": "false-key"},
+                                "fallback": {"selected": "fallback-key"},
+                            },
+                        }
+                    }
+                }
+            },
+            "outputs": ["result"],
+        },
+        {"id": "emit", "uses": "output.emit", "outputs": ["emitted"]},
+    ]
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+    runner = tmp_path / "run-ts-falsy-selector.mjs"
+    runner.write_text(
+        "const runtime = await import('./todo_ts_pkg/src/runtime.mjs');\n"
+        "const result = runtime.invokeGeneratedOperation({\n"
+        "  operationId: 'todo.list.report',\n"
+        "  operationPath: 'operations/todo.list.report.json',\n"
+        "  values: { mode: false, format: 'json' },\n"
+        "});\n"
+        "console.log(JSON.stringify(result));\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["node", str(runner)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"selected": "false-key"}
+
+
+def test_non_aw_fixture_typescript_payload_view_rejects_invalid_limits(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    runtime_binding = cast(dict[str, object], command["runtime_binding"])
+    runtime_binding["primitive_refs"] = [
+        *cast(list[str], runtime_binding["primitive_refs"]),
+        "payload.view",
+    ]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
+    steps.insert(
+        3,
+        {
+            "id": "invalid_view",
+            "uses": "payload.view",
+            "arguments": {"fields": ["item_count"], "limits": ["bad"]},
+            "outputs": ["result"],
+        },
+    )
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "payload.view limits must be an object" in result.stderr
+
+
 def test_non_aw_fixture_typescript_host_owned_primitive_success_path(tmp_path: Path) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript host-owned primitive execution")

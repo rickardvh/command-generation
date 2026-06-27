@@ -277,6 +277,30 @@ def test_payload_assemble_selects_templates_by_declared_mode(primitive_context: 
     assert payload == {"summary": 3}
 
 
+def test_payload_assemble_selects_falsy_declared_mode_values(primitive_context: PrimitiveContext) -> None:
+    payload = execute_primitive(
+        "payload.assemble",
+        values={"mode": False},
+        arguments={
+            "fields": {
+                "template": {
+                    "$select_by_value": {
+                        "value": "mode",
+                        "default": "fallback",
+                        "choices": {
+                            "false": {"selected": "false-key"},
+                            "fallback": {"selected": "fallback-key"},
+                        },
+                    }
+                }
+            }
+        },
+        context=primitive_context,
+    )
+
+    assert payload == {"selected": "false-key"}
+
+
 def test_payload_assemble_builds_package_resource_manifest_payload(primitive_context: PrimitiveContext) -> None:
     payload = execute_primitive(
         "payload.assemble",
@@ -338,6 +362,16 @@ def test_payload_view_projects_allowlisted_fields_with_limits(primitive_context:
         },
         "missing": ["missing"],
     }
+
+
+def test_payload_view_rejects_non_object_limits(primitive_context: PrimitiveContext) -> None:
+    with pytest.raises(PrimitiveExecutionError, match="payload.view limits must be an object"):
+        execute_primitive(
+            "payload.view",
+            values={"result": {"status": "ready"}},
+            arguments={"fields": ["status"], "limits": ["bad"]},
+            context=primitive_context,
+        )
 
 
 def test_payload_project_selects_exact_paths_and_reports_missing(primitive_context: PrimitiveContext) -> None:

@@ -609,7 +609,8 @@ function viewPayload(values, args) {{
   const sourceName = String(args.source ?? 'result');
   if (!Object.prototype.hasOwnProperty.call(values, sourceName)) throw new RuntimeError(`payload.view source value is missing: ${{sourceName}}`);
   const fields = stringList(args.fields ?? [], 'payload.view fields');
-  const limits = isObject(args.limits) ? args.limits : {{}};
+  if (args.limits !== undefined && !isObject(args.limits)) throw new RuntimeError('payload.view limits must be an object');
+  const limits = args.limits ?? {{}};
   const payload = values[sourceName];
   const viewed = {{
     kind: String(args.view_kind ?? 'command-generation/payload-view/v1'),
