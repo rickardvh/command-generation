@@ -634,14 +634,14 @@ function transactionPlan(values, args) {{
   const defaultAction = String(args.default_action ?? 'write');
   const defaultKind = String(args.default_kind ?? 'file');
   const actions = rawResources.map((item) => {{
-    if (typeof item === 'string') return {{ action: defaultAction, kind: defaultKind, path: item }};
+    if (typeof item === 'string') return {{ action: defaultAction, kind: defaultKind, path: validateResourcePath(item) }};
     if (!isObject(item)) throw new RuntimeError('transaction.plan resources must be strings or objects');
     const rawPath = item.path ?? item.relative_path;
     if (typeof rawPath !== 'string' || !rawPath) throw new RuntimeError('transaction.plan resource path is required');
     return {{
       action: String(item.action ?? defaultAction),
       kind: String(item.kind ?? defaultKind),
-      path: rawPath
+      path: validateResourcePath(rawPath)
     }};
   }});
   const targetRootValue = String(args.target_root_value ?? 'target_root');
@@ -659,6 +659,20 @@ function transactionPlan(values, args) {{
       rule: 'Generic transaction planning is dry-run only; mutating apply remains an explicit package-domain primitive.'
     }}
   }};
+}}
+
+function validateResourcePath(path) {{
+  const resourcePath = String(path).replace(/\\\\/g, '/');
+  const parts = resourcePath.split('/');
+  if (
+    !resourcePath ||
+    resourcePath.startsWith('/') ||
+    /^[A-Za-z]:/.test(parts[0] ?? '') ||
+    parts.some((part) => part === '' || part === '.' || part === '..')
+  ) {{
+    throw new RuntimeError(`transaction.plan resource path must be relative and stay inside resources: ${{path}}`);
+  }}
+  return resourcePath;
 }}
 
 function executeHostPrimitive(primitive, values, args, operationId) {{

@@ -5,7 +5,7 @@ import json
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, is_dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from .operation_composition import expand_operation_steps, operation_fragments
@@ -649,7 +649,13 @@ def _transaction_plan(*, values: dict[str, Any], arguments: dict[str, Any]) -> d
     default_kind = str(arguments.get("default_kind", "file"))
     for item in raw_resources:
         if isinstance(item, str):
-            actions.append({"action": default_action, "kind": default_kind, "path": item})
+            actions.append(
+                {
+                    "action": default_action,
+                    "kind": default_kind,
+                    "path": _validate_resource_path(item),
+                }
+            )
             continue
         if not isinstance(item, Mapping):
             raise PrimitiveExecutionError(
@@ -658,11 +664,12 @@ def _transaction_plan(*, values: dict[str, Any], arguments: dict[str, Any]) -> d
         raw_path = item.get("path", item.get("relative_path"))
         if not isinstance(raw_path, str) or not raw_path:
             raise PrimitiveExecutionError("transaction.plan resource path is required")
+        resource_path = _validate_resource_path(raw_path)
         actions.append(
             {
                 "action": str(item.get("action", default_action)),
                 "kind": str(item.get("kind", default_kind)),
-                "path": raw_path,
+                "path": resource_path,
             }
         )
     target_root_value = str(arguments.get("target_root_value", "target_root"))
@@ -687,6 +694,22 @@ def _transaction_plan(*, values: dict[str, Any], arguments: dict[str, Any]) -> d
         },
     }
     return plan
+
+
+def _validate_resource_path(path: str) -> str:
+    resource_path = path.replace("\\", "/")
+    pure_path = PurePosixPath(resource_path)
+    raw_parts = resource_path.split("/")
+    if (
+        not resource_path
+        or pure_path.is_absolute()
+        or ":" in raw_parts[0]
+        or any(part in {"", ".", ".."} for part in raw_parts)
+    ):
+        raise PrimitiveExecutionError(
+            f"transaction.plan resource path must be relative and stay inside resources: {path!r}"
+        )
+    return resource_path
 
 
 def _project_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:

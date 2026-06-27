@@ -1350,6 +1350,47 @@ def test_non_aw_fixture_typescript_transaction_plan_primitive(tmp_path: Path) ->
     assert payload["mutation_safety"]["apply_primitive"] == "fixture.transaction.apply"
 
 
+def test_non_aw_fixture_typescript_transaction_plan_rejects_invalid_resource_path(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    runtime_binding = cast(dict[str, object], command["runtime_binding"])
+    runtime_binding["primitive_refs"] = ["transaction.plan", "output.emit"]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    operation["ir_plan"]["steps"] = [
+        {
+            "id": "plan",
+            "uses": "transaction.plan",
+            "arguments": {"resources": ["../escape.md"]},
+            "outputs": ["result"],
+        },
+        {"id": "emit", "uses": "output.emit", "outputs": ["emitted"]},
+    ]
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "transaction.plan resource path must be relative" in result.stderr
+
+
 def test_non_aw_fixture_typescript_host_owned_primitive_success_path(tmp_path: Path) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript host-owned primitive execution")

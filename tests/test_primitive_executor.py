@@ -413,6 +413,19 @@ def test_transaction_plan_builds_dry_run_plan_with_package_owned_apply_hooks(pri
     }
 
 
+def test_transaction_plan_rejects_paths_outside_relative_resource_namespace(primitive_context: PrimitiveContext) -> None:
+    for path in ("", "/absolute.md", "../escape.md", "nested/../escape.md", "nested//empty.md"):
+        with pytest.raises(
+            PrimitiveExecutionError,
+            match="transaction.plan resource path must be relative",
+        ):
+            execute_primitive(
+                "transaction.plan",
+                values={"resources": [path]},
+                context=primitive_context,
+            )
+
+
 def test_payload_project_selects_exact_paths_and_reports_missing(primitive_context: PrimitiveContext) -> None:
     result = execute_primitive(
         "payload.project",
