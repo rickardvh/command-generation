@@ -351,6 +351,64 @@ def _fixture_manifest_with_nested_cli_shapes(tmp_path: Path) -> dict[str, object
     return manifest
 
 
+def _fixture_manifest_with_typescript_sample_edge_shapes(tmp_path: Path) -> dict[str, object]:
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    command["command"] = {"name": "count"}
+    command["interface"] = {
+        "name": "count",
+        "help": "Count todos.",
+        "arguments": [
+            {
+                "name": "count",
+                "type": "integer",
+                "help": "Number of todos to count.",
+            }
+        ],
+        "options": [
+            {
+                "name": "confirmed",
+                "flags": ["--confirmed"],
+                "action": "store_true",
+                "required": True,
+                "help": "Confirm counting.",
+            },
+            {
+                "name": "limit",
+                "flags": ["--limit"],
+                "type": "integer",
+                "required": True,
+                "help": "Maximum count.",
+            },
+            {
+                "name": "format",
+                "flags": ["--format"],
+                "choices": ["text", "json"],
+                "default": "json",
+                "help": "Output format.",
+            },
+        ],
+    }
+    operation_executor = cast(dict[str, object], cast(dict[str, object], package["python_runtime_binding"])["operation_executor"])
+    operation_executor["initial_values"] = [
+        {"name": "format", "arg": "format", "default": "json"},
+        {"name": "output_format", "arg": "format", "default": "json"},
+        {"name": "count", "arg": "count", "default": 0},
+        {"name": "confirmed", "arg": "confirmed", "default": False},
+        {"name": "limit", "arg": "limit", "default": 0},
+    ]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    assemble = cast(dict[str, object], cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])[2])
+    template = cast(dict[str, object], cast(dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"])["template"])
+    template["count"] = {"$value": "count"}
+    template["confirmed"] = {"$value": "confirmed"}
+    template["limit"] = {"$value": "limit"}
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    return manifest
+
+
 def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[str, object]:
     manifest = _fixture_manifest(tmp_path)
     (tmp_path / "todo_host_primitive_support.py").write_text(
@@ -1224,6 +1282,68 @@ def test_typescript_generated_test_uses_valid_required_subcommand_sample_invocat
     assert "generated runnable adapter rejects command without required subcommand" in test_source
     assert "missing subcommand for list" in test_source
     assert result.returncode == 0, result.stderr
+
+
+def test_typescript_generated_test_samples_required_store_true_and_integer_specs(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for generated TypeScript test execution")
+
+    generate_command_packages(
+        _fixture_manifest_with_typescript_sample_edge_shapes(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    test_source = (tmp_path / "todo_ts_pkg" / "test" / "command-package.test.mjs").read_text(encoding="utf-8")
+    result = subprocess.run(
+        ["node", "--test", "test/command-package.test.mjs"],
+        cwd=tmp_path / "todo_ts_pkg",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert '["count", "1", "--confirmed", "--limit", "1", "--format", "json"]' in test_source
+    assert "--confirmed\", \"value" not in test_source
+    assert result.returncode == 0, result.stderr
+
+
+def test_typescript_cli_coerces_integer_positionals_and_options(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+
+    generate_command_packages(
+        _fixture_manifest_with_typescript_sample_edge_shapes(tmp_path),
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+    result = subprocess.run(
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "count",
+            "2",
+            "--confirmed",
+            "--limit",
+            "3",
+            "--format",
+            "json",
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["count"] == 2
+    assert payload["confirmed"] is True
+    assert payload["limit"] == 3
 
 
 def test_non_aw_fixture_typescript_cli_validates_required_nested_option(tmp_path: Path) -> None:

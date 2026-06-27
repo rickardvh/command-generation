@@ -202,6 +202,10 @@ def _typescript_native_runtime_helpers(*, recovery_command: str) -> str:
         "  const value = String(token);\n"
         "  return option.type === 'integer' ? Number(value) : value;\n"
         "}\n\n"
+        "function argumentValue(argument, token) {\n"
+        "  const value = String(token);\n"
+        "  return argument.type === 'integer' ? Number(value) : value;\n"
+        "}\n\n"
         "function parseInvocation(definition, tokens, path) {\n"
         "  const iface = definition.interface;\n"
         "  const values = initialValues(iface);\n"
@@ -254,7 +258,7 @@ def _typescript_native_runtime_helpers(*, recovery_command: str) -> str:
         "    index += 1;\n"
         "  }\n"
         "  interfaceArguments(iface).forEach((argument, position) => {\n"
-        "    if (position < positional.length) values[argument.name] = positional[position];\n"
+        "    if (position < positional.length) values[argument.name] = argumentValue(argument, positional[position]);\n"
         "    else if (Object.prototype.hasOwnProperty.call(argument, 'default')) values[argument.name] = argument.default;\n"
         "  });\n"
         "  values._command_path = path;\n"
@@ -919,6 +923,13 @@ def _typescript_sample_value(spec: dict[str, Any], *, fallback: str) -> str:
         if default in choices:
             return str(default)
         return str(choices[0])
+    if spec.get("type") == "integer":
+        default = spec.get("default")
+        if isinstance(default, int):
+            return str(default)
+        if isinstance(default, str) and default.strip().lstrip("-").isdigit():
+            return default
+        return "1"
     default = spec.get("default")
     if isinstance(default, str) and default:
         return default
@@ -970,15 +981,18 @@ def _typescript_sample_invocations(command: dict[str, Any]) -> dict[str, Any]:
     spaced_arg_index: int | None = None
     for argument in required_positionals:
         value = _typescript_sample_value(argument, fallback=str(argument.get("name") or "value"))
-        if spaced_arg_index is None:
+        if spaced_arg_index is None and argument.get("type") != "integer":
             spaced_arg_index = len(json_args)
         json_args.append(value)
     for option in required_options:
         flag = _typescript_option_flag(option)
         if not flag:
             continue
+        if option.get("action") == "store_true":
+            json_args.append(flag)
+            continue
         value = _typescript_sample_value(option, fallback="value")
-        if spaced_arg_index is None and option.get("action") not in {"store_true"}:
+        if spaced_arg_index is None and option.get("type") != "integer":
             spaced_arg_index = len(json_args) + 1
         json_args.extend([flag, value])
     if spaced_arg_index is not None:
