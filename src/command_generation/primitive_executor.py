@@ -5,7 +5,7 @@ import json
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, is_dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from .operation_composition import expand_operation_steps, operation_fragments
@@ -107,6 +107,8 @@ def execute_primitive(
         return _project_payload(values=values, arguments=arguments)
     if primitive == "output.emit":
         return _emit_output(values=values, arguments=arguments)
+    if primitive == "transaction.plan":
+        return _transaction_plan(values=values, arguments=arguments)
     if primitive == "python.function.call":
         return _call_python_function(values=values, arguments=arguments)
     if primitive == "operation.call":
@@ -635,6 +637,79 @@ def _limited_view_value(value: Any, *, limit: Any) -> Any:
     if isinstance(value, Sequence):
         return list(value[: max(limit, 0)])
     return value
+
+
+def _transaction_plan(*, values: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    resources_from = str(arguments.get("resources_from", "resources"))
+    raw_resources = values.get(resources_from, arguments.get("resources", []))
+    if not isinstance(raw_resources, list):
+        raise PrimitiveExecutionError("transaction.plan resources must be a list")
+    actions: list[dict[str, Any]] = []
+    default_action = str(arguments.get("default_action", "write"))
+    default_kind = str(arguments.get("default_kind", "file"))
+    for item in raw_resources:
+        if isinstance(item, str):
+            actions.append(
+                {
+                    "action": default_action,
+                    "kind": default_kind,
+                    "path": _validate_resource_path(item),
+                }
+            )
+            continue
+        if not isinstance(item, Mapping):
+            raise PrimitiveExecutionError(
+                "transaction.plan resources must be strings or objects"
+            )
+        raw_path = item.get("path", item.get("relative_path"))
+        if not isinstance(raw_path, str) or not raw_path:
+            raise PrimitiveExecutionError("transaction.plan resource path is required")
+        resource_path = _validate_resource_path(raw_path)
+        actions.append(
+            {
+                "action": str(item.get("action", default_action)),
+                "kind": str(item.get("kind", default_kind)),
+                "path": resource_path,
+            }
+        )
+    target_root_value = str(arguments.get("target_root_value", "target_root"))
+    plan: dict[str, Any] = {
+        "kind": str(arguments.get("plan_kind", "command-generation/transaction-plan/v1")),
+        "dry_run": True,
+        "target_root": str(values.get(target_root_value, "")),
+        "schema_ref": str(arguments.get("schema_ref", "")),
+        "actions": actions,
+        "mutation_safety": {
+            "apply_status": "package-owned",
+            "apply_primitive": str(arguments.get("apply_primitive", "")),
+            "conflict_hooks": _string_list(
+                arguments.get("conflict_hooks", []),
+                source="transaction.plan conflict_hooks",
+            ),
+            "provenance_hooks": _string_list(
+                arguments.get("provenance_hooks", []),
+                source="transaction.plan provenance_hooks",
+            ),
+            "rule": "Generic transaction planning is dry-run only; mutating apply remains an explicit package-domain primitive.",
+        },
+    }
+    return plan
+
+
+def _validate_resource_path(path: str) -> str:
+    resource_path = path.replace("\\", "/")
+    pure_path = PurePosixPath(resource_path)
+    raw_parts = resource_path.split("/")
+    if (
+        not resource_path
+        or pure_path.is_absolute()
+        or ":" in raw_parts[0]
+        or any(part in {"", ".", ".."} for part in raw_parts)
+    ):
+        raise PrimitiveExecutionError(
+            f"transaction.plan resource path must be relative and stay inside resources: {path!r}"
+        )
+    return resource_path
 
 
 def _project_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
