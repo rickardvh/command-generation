@@ -1141,6 +1141,58 @@ def test_typescript_cli_append_option_validates_choices(tmp_path: Path) -> None:
     assert "--tag must be one of: alpha, beta" in result.stderr
 
 
+def test_non_aw_fixture_typescript_payload_view_primitive(tmp_path: Path) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript CLI execution")
+
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    runtime_binding = cast(dict[str, object], command["runtime_binding"])
+    runtime_binding["primitive_refs"] = [
+        *cast(list[str], runtime_binding["primitive_refs"]),
+        "payload.view",
+    ]
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
+    steps.insert(
+        3,
+        {
+            "id": "compact_view",
+            "uses": "payload.view",
+            "arguments": {
+                "fields": ["item_count", "items"],
+                "limits": {"items": 1},
+                "view_kind": "todo/compact-view/v1",
+            },
+            "outputs": ["result"],
+        },
+    )
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+    generate_command_packages(
+        manifest,
+        repo_root=tmp_path,
+        source_path="command_package_ir.json",
+        regenerate_command="python generate.py",
+        check=False,
+    )
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "todo/compact-view/v1"
+    assert payload["values"]["item_count"] == 2
+    assert payload["values"]["items"] == [{"title": "Write test"}]
+
+
 def test_non_aw_fixture_typescript_host_owned_primitive_success_path(tmp_path: Path) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript host-owned primitive execution")
@@ -2177,6 +2229,7 @@ def test_primitive_registry_round_trips_host_metadata() -> None:
 def test_builtin_registry_declares_portable_primitives() -> None:
     assert "filesystem.read" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "payload.project" in BUILTIN_PORTABLE_PRIMITIVES.ids()
+    assert "payload.view" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "operation.call" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "operation.dispatch" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "output.emit" in BUILTIN_PORTABLE_PRIMITIVES.ids()
@@ -2189,6 +2242,7 @@ def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
     assert definitions["filesystem.read"]["kind"] == "portable"
     assert definitions["json.parse"]["kind"] == "portable"
     assert definitions["payload.project"]["kind"] == "portable"
+    assert definitions["payload.view"]["kind"] == "portable"
     assert definitions["operation.call"]["kind"] == "host-owned"
     assert definitions["operation.call"]["target_support"]["python"] == "implemented"
     assert definitions["operation.call"]["target_support"]["typescript"] == "unsupported"

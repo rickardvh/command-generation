@@ -432,6 +432,14 @@ function resolveTemplate(template, values) {{
   const keys = Object.keys(template);
   if (keys.length === 1 && keys[0] === '$value') return values[String(template.$value)];
   if (keys.length === 1 && keys[0] === '$count') return Array.isArray(values[String(template.$count)]) ? values[String(template.$count)].length : 0;
+  if (keys.length === 1 && keys[0] === '$select_by_value') {{
+    const spec = template.$select_by_value;
+    if (!isObject(spec) || !isObject(spec.choices)) throw new RuntimeError('template $select_by_value choices must be an object');
+    let selectedKey = String(values[String(spec.value ?? '')] ?? spec.default ?? '');
+    if (!Object.prototype.hasOwnProperty.call(spec.choices, selectedKey)) selectedKey = String(spec.default ?? '');
+    if (!Object.prototype.hasOwnProperty.call(spec.choices, selectedKey)) throw new RuntimeError(`template $select_by_value cannot resolve choice for ${{String(spec.value ?? '')}}`);
+    return resolveTemplate(spec.choices[selectedKey], values);
+  }}
   return Object.fromEntries(Object.entries(template).map(([key, value]) => [key, resolveTemplate(value, values)]));
 }}
 
@@ -528,6 +536,20 @@ function assemblePayload(values, args) {{
       optional_enable_commands: stringList(fields.optional_enable_commands ?? [], 'payload.assemble fields.optional_enable_commands')
     }};
   }}
+  if (fields.payload_kind === 'package-resource-manifest') {{
+    const manifestFrom = String(fields.manifest_from ?? 'manifest');
+    const manifest = values[manifestFrom] ?? {{}};
+    if (!isObject(manifest)) throw new RuntimeError(`${{manifestFrom}} must be an object`);
+    const filesPath = String(fields.files_path ?? 'files');
+    const bundledSkillsPath = String(fields.bundled_skill_files_path ?? 'bundled_skill_files');
+    return {{
+      files: manifestPathList(dottedValue(manifest, filesPath) ?? [], `${{manifestFrom}}.${{filesPath}}`),
+      default_files: stringList(fields.default_files ?? [], 'payload.assemble fields.default_files'),
+      optional_files: stringList(fields.optional_files ?? [], 'payload.assemble fields.optional_files'),
+      bundled_skill_files: manifestPathList(dottedValue(manifest, bundledSkillsPath) ?? [], `${{manifestFrom}}.${{bundledSkillsPath}}`),
+      optional_enable_commands: stringList(fields.optional_enable_commands ?? [], 'payload.assemble fields.optional_enable_commands')
+    }};
+  }}
   const payload = {{ dry_run: Boolean(fields.dry_run ?? true), message: String(fields.message ?? '') }};
   if (values.target_root !== undefined) payload.target_root = String(values.target_root);
   if (fields.actions_from === 'files') {{
@@ -557,6 +579,16 @@ function relativePathList(value, source) {{
   }});
 }}
 
+function manifestPathList(value, source) {{
+  if (!Array.isArray(value)) throw new RuntimeError(`${{source}} must be a list`);
+  return value.map((item) => {{
+    if (typeof item === 'string') return item;
+    if (isObject(item) && typeof item.relative_path === 'string') return item.relative_path;
+    if (isObject(item) && typeof item.path === 'string') return item.path;
+    throw new RuntimeError(`${{source}} entries must be strings or objects with path`);
+  }});
+}}
+
 function emitOutput(values) {{
   const result = values.result;
   if (String(values.format ?? 'text') === 'json') return `${{JSON.stringify(result, null, 2)}}\n`;
@@ -565,6 +597,33 @@ function emitOutput(values) {{
   const lines = [String(result.message ?? result.kind ?? '')];
   for (const action of (Array.isArray(result.actions) ? result.actions : [])) lines.push(`- ${{action.path ?? action.id ?? action.kind}}`);
   return `${{lines.join('\\n').trimEnd()}}\n`;
+}}
+
+function limitedViewValue(value, limit) {{
+  if (!Number.isInteger(limit) || typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.slice(0, Math.max(limit, 0));
+  return value;
+}}
+
+function viewPayload(values, args) {{
+  const sourceName = String(args.source ?? 'result');
+  if (!Object.prototype.hasOwnProperty.call(values, sourceName)) throw new RuntimeError(`payload.view source value is missing: ${{sourceName}}`);
+  const fields = stringList(args.fields ?? [], 'payload.view fields');
+  const limits = isObject(args.limits) ? args.limits : {{}};
+  const payload = values[sourceName];
+  const viewed = {{
+    kind: String(args.view_kind ?? 'command-generation/payload-view/v1'),
+    source_command: String(args.source_command ?? values.operation_id ?? ''),
+    values: {{}}
+  }};
+  const missing = [];
+  for (const field of fields) {{
+    const [found, value] = fieldByPath(payload, field);
+    if (found) viewed.values[field] = limitedViewValue(value, limits[field]);
+    else missing.push(field);
+  }}
+  if (missing.length) viewed.missing = missing;
+  return viewed;
 }}
 
 function executeHostPrimitive(primitive, values, args, operationId) {{
@@ -596,6 +655,7 @@ function executePrimitive(primitive, values, args, operationId) {{
   if (primitive === 'filesystem.glob') return globFiles(valueRoot(args, values), String(args.pattern ?? '')).map((relative_path) => ({{ relative_path }}));
   if (primitive === 'json.parse') return JSON.parse(String(values[String(args.source ?? 'registry_text')]));
   if (primitive === 'payload.assemble') return assemblePayload(values, args);
+  if (primitive === 'payload.view') return viewPayload(values, args);
   if (primitive === 'payload.project') return projectPayload(values, args);
   if (primitive === 'output.emit') return emitOutput(values);
   return executeHostPrimitive(primitive, values, args, operationId);

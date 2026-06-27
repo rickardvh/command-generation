@@ -161,6 +161,12 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "target_support": {"python": "implemented", "typescript": "implemented"},
         },
         {
+            "id": "payload.view",
+            "kind": "portable",
+            "description": "Build a compact allowlisted payload view with declared per-field limits.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
             "id": "payload.project",
             "kind": "portable",
             "description": "Project exact dot-path selectors from a payload into a generic selected-output wrapper.",
