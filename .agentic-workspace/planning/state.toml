@@ -10,3 +10,7 @@ work_items = []
 
 [active]
 execplans = []
+
+[todo]
+active_items = []
+queued_items = []
