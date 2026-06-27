@@ -179,6 +179,12 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
             "target_support": {"python": "implemented", "typescript": "implemented"},
         },
         {
+            "id": "transaction.plan",
+            "kind": "portable",
+            "description": "Construct a deterministic dry-run transaction plan while leaving apply semantics package-owned.",
+            "target_support": {"python": "implemented", "typescript": "implemented"},
+        },
+        {
             "id": "operation.call",
             "kind": "host-owned",
             "description": "Call an explicit package-owned operation function through generated value mapping.",

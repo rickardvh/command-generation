@@ -627,6 +627,40 @@ function viewPayload(values, args) {{
   return viewed;
 }}
 
+function transactionPlan(values, args) {{
+  const resourcesFrom = String(args.resources_from ?? 'resources');
+  const rawResources = values[resourcesFrom] ?? args.resources ?? [];
+  if (!Array.isArray(rawResources)) throw new RuntimeError('transaction.plan resources must be a list');
+  const defaultAction = String(args.default_action ?? 'write');
+  const defaultKind = String(args.default_kind ?? 'file');
+  const actions = rawResources.map((item) => {{
+    if (typeof item === 'string') return {{ action: defaultAction, kind: defaultKind, path: item }};
+    if (!isObject(item)) throw new RuntimeError('transaction.plan resources must be strings or objects');
+    const rawPath = item.path ?? item.relative_path;
+    if (typeof rawPath !== 'string' || !rawPath) throw new RuntimeError('transaction.plan resource path is required');
+    return {{
+      action: String(item.action ?? defaultAction),
+      kind: String(item.kind ?? defaultKind),
+      path: rawPath
+    }};
+  }});
+  const targetRootValue = String(args.target_root_value ?? 'target_root');
+  return {{
+    kind: String(args.plan_kind ?? 'command-generation/transaction-plan/v1'),
+    dry_run: true,
+    target_root: String(values[targetRootValue] ?? ''),
+    schema_ref: String(args.schema_ref ?? ''),
+    actions,
+    mutation_safety: {{
+      apply_status: 'package-owned',
+      apply_primitive: String(args.apply_primitive ?? ''),
+      conflict_hooks: stringList(args.conflict_hooks ?? [], 'transaction.plan conflict_hooks'),
+      provenance_hooks: stringList(args.provenance_hooks ?? [], 'transaction.plan provenance_hooks'),
+      rule: 'Generic transaction planning is dry-run only; mutating apply remains an explicit package-domain primitive.'
+    }}
+  }};
+}}
+
 function executeHostPrimitive(primitive, values, args, operationId) {{
 {configured_host_primitive_call}  const hostPrimitive = globalThis.hostPrimitive;
   if (typeof hostPrimitive === 'function') return hostPrimitive(primitive, values, args, operationId);
@@ -659,6 +693,7 @@ function executePrimitive(primitive, values, args, operationId) {{
   if (primitive === 'payload.view') return viewPayload(values, args);
   if (primitive === 'payload.project') return projectPayload(values, args);
   if (primitive === 'output.emit') return emitOutput(values);
+  if (primitive === 'transaction.plan') return transactionPlan(values, args);
   return executeHostPrimitive(primitive, values, args, operationId);
 }}
 

@@ -374,6 +374,45 @@ def test_payload_view_rejects_non_object_limits(primitive_context: PrimitiveCont
         )
 
 
+def test_transaction_plan_builds_dry_run_plan_with_package_owned_apply_hooks(primitive_context: PrimitiveContext) -> None:
+    plan = execute_primitive(
+        "transaction.plan",
+        values={
+            "target_root": str(primitive_context.cwd / "target"),
+            "resources": [
+                {"path": "notes/new.md", "action": "create", "kind": "file"},
+                "notes/existing.md",
+            ],
+        },
+        arguments={
+            "plan_kind": "fixture/transaction-plan/v1",
+            "schema_ref": "schemas/fixture-plan.schema.json",
+            "apply_primitive": "fixture.transaction.apply",
+            "conflict_hooks": ["check-existing-path"],
+            "provenance_hooks": ["record-source-contract"],
+        },
+        context=primitive_context,
+    )
+
+    assert plan == {
+        "kind": "fixture/transaction-plan/v1",
+        "dry_run": True,
+        "target_root": str(primitive_context.cwd / "target"),
+        "schema_ref": "schemas/fixture-plan.schema.json",
+        "actions": [
+            {"action": "create", "kind": "file", "path": "notes/new.md"},
+            {"action": "write", "kind": "file", "path": "notes/existing.md"},
+        ],
+        "mutation_safety": {
+            "apply_status": "package-owned",
+            "apply_primitive": "fixture.transaction.apply",
+            "conflict_hooks": ["check-existing-path"],
+            "provenance_hooks": ["record-source-contract"],
+            "rule": "Generic transaction planning is dry-run only; mutating apply remains an explicit package-domain primitive.",
+        },
+    }
+
+
 def test_payload_project_selects_exact_paths_and_reports_missing(primitive_context: PrimitiveContext) -> None:
     result = execute_primitive(
         "payload.project",
@@ -590,6 +629,7 @@ def test_removed_transitional_primitives_are_not_generic_executor_behavior(primi
         "payload.verify",
         "output.emit.install-result",
         "output.emit.current-memory",
+        "transaction.apply",
     ):
         with pytest.raises(PrimitiveExecutionError, match="unsupported host primitive"):
             execute_primitive(primitive, values={"result": {}}, context=primitive_context)
