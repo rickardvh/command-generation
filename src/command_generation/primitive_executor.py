@@ -107,6 +107,8 @@ def execute_primitive(
         return _emit_output(values=values, arguments=arguments)
     if primitive == "python.function.call":
         return _call_python_function(values=values, arguments=arguments)
+    if primitive == "operation.call":
+        return _call_operation(values=values, arguments=arguments)
     return execute_host_primitive(
         primitive, values=values, arguments=arguments, context=context
     )
@@ -693,44 +695,74 @@ def _emit_planning_module_report_text(result: dict[str, Any]) -> str:
 
 
 def _call_python_function(*, values: dict[str, Any], arguments: dict[str, Any]) -> Any:
+    return _call_operation(values=values, arguments=arguments)
+
+
+def _call_operation(*, values: dict[str, Any], arguments: dict[str, Any]) -> Any:
     import_module = str(arguments.get("import_module", "")).strip()
     function_name = str(arguments.get("function", "")).strip()
     if not import_module or not function_name:
         raise PrimitiveExecutionError(
-            "python.function.call requires import_module and function"
+            "operation.call requires import_module and function"
         )
     try:
         function = getattr(importlib.import_module(import_module), function_name)
     except (ImportError, AttributeError) as exc:
         raise PrimitiveExecutionError(
-            f"python.function.call cannot resolve {import_module}.{function_name}"
+            f"operation.call cannot resolve {import_module}.{function_name}"
         ) from exc
+    positional = _resolve_call_args(values=values, raw_args=arguments.get("args", []))
     kwargs = _resolve_call_kwargs(values=values, raw_kwargs=arguments.get("kwargs", {}))
-    return function(**kwargs)
+    return function(*positional, **kwargs)
+
+
+def _resolve_call_args(*, values: dict[str, Any], raw_args: Any) -> list[Any]:
+    if not isinstance(raw_args, Sequence) or isinstance(raw_args, (str, bytes)):
+        raise PrimitiveExecutionError("operation.call args must be a sequence")
+    return [
+        _resolve_call_argument(values=values, source=source, label=f"arg {index}")
+        for index, source in enumerate(raw_args)
+    ]
 
 
 def _resolve_call_kwargs(*, values: dict[str, Any], raw_kwargs: Any) -> dict[str, Any]:
-    if not isinstance(raw_kwargs, dict):
-        raise PrimitiveExecutionError("python.function.call kwargs must be an object")
+    if not isinstance(raw_kwargs, Mapping):
+        raise PrimitiveExecutionError("operation.call kwargs must be an object")
     kwargs: dict[str, Any] = {}
     for name, source in raw_kwargs.items():
-        if not isinstance(source, dict):
-            kwargs[str(name)] = source
-            continue
-        if "value" in source:
-            value_name = str(source["value"])
-            if value_name not in values:
-                raise PrimitiveExecutionError(
-                    f"python.function.call cannot resolve value {value_name!r}"
-                )
-            kwargs[str(name)] = values[value_name]
-        elif "literal" in source:
-            kwargs[str(name)] = source["literal"]
-        else:
-            raise PrimitiveExecutionError(
-                f"python.function.call kwarg {name!r} must declare value or literal"
-            )
+        kwargs[str(name)] = _resolve_call_argument(
+            values=values, source=source, label=f"kwarg {name!r}"
+        )
     return kwargs
+
+
+def _resolve_call_argument(*, values: dict[str, Any], source: Any, label: str) -> Any:
+    if not isinstance(source, Mapping):
+        return source
+    if "value" in source:
+        return _require_call_value(values, str(source["value"]))
+    if "literal" in source:
+        return source["literal"]
+    if "raw_value" in source:
+        return _require_call_value(values, str(source["raw_value"]))
+    if "string_value" in source or "str_value" in source:
+        value_name = str(source.get("string_value", source.get("str_value", "")))
+        return str(values.get(value_name) or source.get("default", ""))
+    if "bool_value" in source:
+        return bool(values.get(str(source["bool_value"])))
+    if "not_bool_value" in source:
+        return not bool(values.get(str(source["not_bool_value"])))
+    raise PrimitiveExecutionError(
+        f"operation.call {label} must declare value, raw_value, literal, string_value, bool_value, or not_bool_value"
+    )
+
+
+def _require_call_value(values: dict[str, Any], value_name: str) -> Any:
+    if value_name not in values:
+        raise PrimitiveExecutionError(
+            f"operation.call cannot resolve value {value_name!r}"
+        )
+    return values[value_name]
 
 
 def _resolve_dotted_value(payload: Mapping[str, Any], dotted_path: str) -> Any:
