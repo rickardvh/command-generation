@@ -109,6 +109,8 @@ def execute_primitive(
         return _call_python_function(values=values, arguments=arguments)
     if primitive == "operation.call":
         return _call_operation(values=values, arguments=arguments)
+    if primitive == "operation.dispatch":
+        return _dispatch_operation(values=values, arguments=arguments)
     return execute_host_primitive(
         primitive, values=values, arguments=arguments, context=context
     )
@@ -714,6 +716,23 @@ def _call_operation(*, values: dict[str, Any], arguments: dict[str, Any]) -> Any
     positional = _resolve_call_args(values=values, raw_args=arguments.get("args", []))
     kwargs = _resolve_call_kwargs(values=values, raw_kwargs=arguments.get("kwargs", {}))
     return function(*positional, **kwargs)
+
+
+def _dispatch_operation(*, values: dict[str, Any], arguments: dict[str, Any]) -> Any:
+    raw_branches = arguments.get("branches", [])
+    if not isinstance(raw_branches, Sequence) or isinstance(raw_branches, (str, bytes)):
+        raise PrimitiveExecutionError("operation.dispatch branches must be a sequence")
+    if not raw_branches:
+        raise PrimitiveExecutionError("operation.dispatch requires at least one branch")
+    for index, raw_branch in enumerate(raw_branches):
+        if not isinstance(raw_branch, Mapping):
+            raise PrimitiveExecutionError("operation.dispatch branch must be an object")
+        branch = dict(raw_branch)
+        if not _condition_matches(branch.get("when"), values=values):
+            continue
+        branch.pop("when", None)
+        return _call_operation(values=values, arguments=branch)
+    raise PrimitiveExecutionError("operation.dispatch no branch matched")
 
 
 def _resolve_call_args(*, values: dict[str, Any], raw_args: Any) -> list[Any]:

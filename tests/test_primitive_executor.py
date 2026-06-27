@@ -552,6 +552,82 @@ def test_operation_call_maps_positional_keyword_and_coerced_values(primitive_con
     assert calls == [result]
 
 
+def test_operation_dispatch_selects_branch_specific_function_and_mapping(primitive_context: PrimitiveContext) -> None:
+    runtime_module = types.ModuleType("fixture_dispatch_runtime")
+    calls: list[dict[str, object]] = []
+
+    def archive_parent(parent_lane_closeout: str, *, retain_archive: bool) -> dict[str, object]:
+        call = {
+            "branch": "parent",
+            "parent_lane_closeout": parent_lane_closeout,
+            "retain_archive": retain_archive,
+        }
+        calls.append(call)
+        return call
+
+    def archive_execplan(execplan_id: str, *, retain_archive: bool) -> dict[str, object]:
+        call = {
+            "branch": "execplan",
+            "execplan_id": execplan_id,
+            "retain_archive": retain_archive,
+        }
+        calls.append(call)
+        return call
+
+    setattr(runtime_module, "archive_parent", archive_parent)
+    setattr(runtime_module, "archive_execplan", archive_execplan)
+    sys.modules[runtime_module.__name__] = runtime_module
+    dispatch_arguments = {
+        "branches": [
+            {
+                "when": {"value": "parent_lane_closeout", "present": True},
+                "import_module": runtime_module.__name__,
+                "function": "archive_parent",
+                "args": [{"value": "parent_lane_closeout"}],
+                "kwargs": {"retain_archive": {"not_bool_value": "discard_archive"}},
+            },
+            {
+                "when": {"value": "parent_lane_closeout", "present": False},
+                "import_module": runtime_module.__name__,
+                "function": "archive_execplan",
+                "args": [{"value": "execplan_id"}],
+                "kwargs": {"retain_archive": {"not_bool_value": "discard_archive"}},
+            },
+        ]
+    }
+    try:
+        parent_result = execute_primitive(
+            "operation.dispatch",
+            values={
+                "parent_lane_closeout": "lane-1",
+                "execplan_id": "plan-1",
+                "discard_archive": False,
+            },
+            arguments=dispatch_arguments,
+            context=primitive_context,
+        )
+        execplan_result = execute_primitive(
+            "operation.dispatch",
+            values={"execplan_id": "plan-2", "discard_archive": True},
+            arguments=dispatch_arguments,
+            context=primitive_context,
+        )
+    finally:
+        sys.modules.pop(runtime_module.__name__, None)
+
+    assert parent_result == {
+        "branch": "parent",
+        "parent_lane_closeout": "lane-1",
+        "retain_archive": True,
+    }
+    assert execplan_result == {
+        "branch": "execplan",
+        "execplan_id": "plan-2",
+        "retain_archive": False,
+    }
+    assert calls == [parent_result, execplan_result]
+
+
 def test_python_function_call_rejects_unresolved_targets(primitive_context: PrimitiveContext) -> None:
     with pytest.raises(PrimitiveExecutionError, match="cannot resolve"):
         execute_primitive(

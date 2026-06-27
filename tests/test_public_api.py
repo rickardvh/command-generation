@@ -2178,6 +2178,7 @@ def test_builtin_registry_declares_portable_primitives() -> None:
     assert "filesystem.read" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "payload.project" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "operation.call" in BUILTIN_PORTABLE_PRIMITIVES.ids()
+    assert "operation.dispatch" in BUILTIN_PORTABLE_PRIMITIVES.ids()
     assert "output.emit" in BUILTIN_PORTABLE_PRIMITIVES.ids()
 
 
@@ -2191,6 +2192,9 @@ def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
     assert definitions["operation.call"]["kind"] == "host-owned"
     assert definitions["operation.call"]["target_support"]["python"] == "implemented"
     assert definitions["operation.call"]["target_support"]["typescript"] == "unsupported"
+    assert definitions["operation.dispatch"]["kind"] == "host-owned"
+    assert definitions["operation.dispatch"]["target_support"]["python"] == "implemented"
+    assert definitions["operation.dispatch"]["target_support"]["typescript"] == "unsupported"
     assert definitions["python.function.call"]["kind"] == "host-owned"
     assert definitions["typescript.domain.execute"]["kind"] == "host-owned"
 
