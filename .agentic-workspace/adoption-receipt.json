@@ -1,0 +1,38 @@
+{
+  "adopted_state": [
+    "memory/repo/decisions/README.md",
+    "memory/repo/domains/README.md",
+    "memory/repo/index.md",
+    "memory/repo/invariants/README.md",
+    "memory/repo/manifest.toml",
+    "memory/repo/runbooks/README.md",
+    "memory/repo/templates/invariant.template.md",
+    "memory/repo/templates/memory-note.template.md",
+    "memory/repo/templates/runbook.template.md",
+    "planning/execplans",
+    "planning/execplans/README.md",
+    "planning/execplans/TEMPLATE.plan.json",
+    "planning/execplans/archive/README.md",
+    "planning/execplans/archive/update-uv-packages-20260627.plan.json",
+    "planning/state.toml",
+    "verification/manifest.toml"
+  ],
+  "checked_in_rule": "necessary-surfaces-only",
+  "kind": "agentic-workspace/adoption-receipt/v1",
+  "local_only": [
+    "local/scratch/bootstrap-handoff.md",
+    "local/scratch/bootstrap-handoff.json",
+    "absolute-path provenance"
+  ],
+  "omitted_package_payload": [
+    "package-payload",
+    "payload-provenance.json",
+    "AGENTS.md",
+    "planning/package-payload",
+    "memory/package-payload",
+    "verification/package-payload"
+  ],
+  "payload_mirror": false,
+  "recheck_command": "agentic-workspace doctor --target . --format json",
+  "rule": "This receipt is the durable authority that ordinary bootstrap intentionally omitted generic package payload. Status and doctor must not infer that decision from missing files alone."
+}

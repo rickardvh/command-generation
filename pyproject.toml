@@ -1,6 +1,6 @@
 [project]
 name = "command-generation"
-version = "1.2.0"
+version = "1.2.1"
 description = "Package-neutral command generation and conformance utilities."
 authors = [
     { name = "Rickard von Haugwitz", email = "rickardvh@gmail.com" }
