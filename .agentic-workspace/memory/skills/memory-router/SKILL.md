@@ -48,4 +48,3 @@ It helps the agent load memory selectively instead of scanning the whole reposit
 - a small set of relevant memory notes to read next
 - a clearer explanation of why those notes matter
 - an updated `.agentic-workspace/memory/repo/index.md` or `.agentic-workspace/memory/repo/manifest.toml` when routing drift is discovered
-

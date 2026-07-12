@@ -59,4 +59,3 @@ It operates on checked-in memory files and keeps them aligned with the codebase.
 - notes marked `Needs verification` where certainty is incomplete
 - deprecated or removed stale notes
 - an updated `.agentic-workspace/memory/repo/index.md` or `.agentic-workspace/memory/repo/manifest.toml` when routing changed
-
