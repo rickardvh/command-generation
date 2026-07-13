@@ -41,7 +41,7 @@ Missing `for_each` values, `null`, and empty strings render no lines. Present no
 
 ## Placeholders And Filters
 
-Templates replace `{path}` placeholders with scalar values. Empty `{}` and `{.}` refer to the current item. `root.` paths resolve against the root result payload.
+Templates replace `{path}` placeholders with scalar values in a single pass over the original template. Placeholder-looking text introduced by a replacement is emitted literally and is not expanded again. Empty `{}` and `{.}` refer to the current item. `root.` paths resolve against the root result payload.
 
 Direct placeholders accept JSON scalars only. Arrays and objects must use the explicit `{"json": "path"}` line form. Missing values and null render as an empty string.
 
