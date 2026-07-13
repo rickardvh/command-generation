@@ -578,6 +578,60 @@ def test_output_emit_supports_json_and_text(primitive_context: PrimitiveContext)
     assert emitted_text == "Skills\n- review/SKILL.md\n"
 
 
+def test_output_emit_supports_declared_text_views(primitive_context: PrimitiveContext) -> None:
+    payload = {
+        "kind": "fixture/report/v1",
+        "profile": "compact",
+        "enabled": True,
+        "items": ["alpha", "beta"],
+        "records": [{"name": "one", "status": "ready"}],
+        "values": {"status": "ok"},
+        "warnings": ["check config"],
+    }
+
+    emitted_text = execute_primitive(
+        "output.emit",
+        values={"result": payload, "format": "text"},
+        arguments={
+            "text_views": [
+                {
+                    "id": "fixture.compact",
+                    "match": {"kind": "fixture/report/v1", "profile": "compact"},
+                    "lines": [
+                        "Enabled: {enabled}",
+                        "Items: {items|join:, |empty:(none)}",
+                        "Record count: {records|len}",
+                        {"literal": "Values:"},
+                        {"json": "values"},
+                        {"when": "warnings", "lines": ["Warnings:", {"for_each": {"path": "warnings", "template": "- {}"}}]},
+                        {
+                            "for_each": {
+                                "path": "records",
+                                "lines": ["Record: {name} ({status})"],
+                            }
+                        },
+                    ],
+                },
+                {"id": "fixture.default", "default": True, "lines": ["Default"]},
+            ]
+        },
+        context=primitive_context,
+    )
+
+    assert emitted_text == (
+        "Enabled: True\n"
+        "Items: alpha, beta\n"
+        "Record count: 1\n"
+        "Values:\n"
+        "{\n"
+        '  "status": "ok"\n'
+        "}\n"
+        "Warnings:\n"
+        "- check config\n"
+        "Record: one (ready)\n"
+    )
+
+
 def test_output_emit_serializes_module_result_objects(primitive_context: PrimitiveContext) -> None:
     @dataclass
     class Action:
