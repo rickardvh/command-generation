@@ -829,7 +829,8 @@
                             "target_root_resolve",
                             "sectioned_payload_select",
                             "json_resource_load",
-                            "json_output_with_source_fallback"
+                            "json_output_with_source_fallback",
+                            "config_output"
                           ]
                         },
                         "generated_root": {
@@ -853,6 +854,10 @@
                           "minLength": 1
                         },
                         "sectioned_payload_kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "tiny_config_kind": {
                           "type": "string",
                           "minLength": 1
                         },

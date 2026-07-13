@@ -821,6 +821,94 @@ def _python_local_runtime_helper_block() -> str:
     )
 
 
+def _python_config_output_helper_block() -> str:
+    return (
+        "def _emit_config_tiny_text(payload: dict[str, Any]) -> str:\n"
+        "    workspace = payload['workspace']\n"
+        "    local_runtime = payload['local_runtime']\n"
+        "    next_detail = payload['next_detail']\n"
+        "    lines = [\n"
+        "        f\"Target: {payload['target']}\",\n"
+        "        f\"Config path: {payload['config_path']}\",\n"
+        "        f\"AW enabled: {workspace['enabled']} ({workspace['enabled_source']})\",\n"
+        "        f\"Enabled modules: {', '.join(workspace['enabled_modules']) or '(none)'}\",\n"
+        "        f\"Improvement latitude: {workspace['improvement_latitude']}\",\n"
+        "        f\"Optimization bias: {workspace['optimization_bias']}\",\n"
+        "        f\"Delegation mode: {local_runtime['delegation_mode']['value']}\",\n"
+        "        f\"Safe to auto-run commands: {local_runtime['safe_to_auto_run_commands']['value']}\",\n"
+        "        f\"Select fields: {next_detail['select']}\",\n"
+        "        f\"Verbose diagnostics: {next_detail['verbose']}\",\n"
+        "    ]\n"
+        "    return '\\n'.join(lines) + '\\n'\n"
+        "\n\n"
+        "def _emit_config_compact_text(payload: dict[str, Any]) -> str:\n"
+        "    workspace = payload['workspace']\n"
+        "    local_runtime = payload['local_runtime']\n"
+        "    lines = [\n"
+        "        f\"Target: {payload['target']}\",\n"
+        "        f\"Config path: {payload['config_path']}\",\n"
+        "        f\"Exists: {payload['exists']}\",\n"
+        "        f\"AW enabled: {workspace['enabled']} ({workspace['enabled_source']})\",\n"
+        "        f\"Enabled modules: {', '.join(workspace['enabled_modules']) or '(none)'}\",\n"
+        "        f\"Improvement latitude: {workspace['improvement_latitude']}\",\n"
+        "        f\"Optimization bias: {workspace['optimization_bias']}\",\n"
+        "        f\"Workflow obligations: {len(workspace['workflow_obligations'])} configured\",\n"
+        "        f\"Delegation mode: {local_runtime['delegation_mode']['value']}\",\n"
+        "        f\"Safe to auto-run commands: {local_runtime['safe_to_auto_run_commands']['value']}\",\n"
+        "        f\"Full profile: {payload['full_profile_command']}\",\n"
+        "    ]\n"
+        "    return '\\n'.join(lines) + '\\n'\n"
+        "\n\n"
+        "def _emit_config_full_text(payload: dict[str, Any]) -> str:\n"
+        "    workspace = payload['workspace']\n"
+        "    edit_reference = payload['edit_reference']\n"
+        "    mixed_agent = payload['mixed_agent']\n"
+        "    lines = [\n"
+        "        f\"Target: {payload['target']}\",\n"
+        "        f\"Config path: {payload['config_path']}\",\n"
+        "        f\"Exists: {payload['exists']}\",\n"
+        "        f\"AW enabled: {workspace['enabled']} ({workspace['enabled_source']})\",\n"
+        "        f\"Reference: {edit_reference['reference_doc']}\",\n"
+        "        f\"Schema: {edit_reference['source_schema']}\",\n"
+        "        f\"Check command: {edit_reference['check_command']}\",\n"
+        "    ]\n"
+        "    warnings = payload['warnings']\n"
+        "    if warnings:\n"
+        "        lines.append('Warnings:')\n"
+        "        lines.extend(f'- {warning}' for warning in warnings)\n"
+        "    lines.extend([\n"
+        "        f\"Enabled modules: {', '.join(workspace['enabled_modules']) or '(none)'}\",\n"
+        "        f\"Agent instructions file: {workspace['agent_instructions_file']} ({workspace['agent_instructions_file_source']})\",\n"
+        "        f\"Workflow artifact profile: {workspace['workflow_artifact_profile']} ({workspace['workflow_artifact_profile_source']})\",\n"
+        "        f\"Agent configuration substrate: {workspace['agent_configuration_substrate']['canonical_doc']} ({workspace['agent_configuration_substrate']['owner_surface']})\",\n"
+        "        f\"System-intent sources: {', '.join(workspace['system_intent']['sources']) or 'none'} ({workspace['system_intent']['sources_source']})\",\n"
+        "        f\"Workflow obligations: {len(workspace['workflow_obligations'])} configured\",\n"
+        "        f\"Improvement latitude: {workspace['improvement_latitude']} ({workspace['improvement_latitude_source']})\",\n"
+        "        f\"Optimization bias: {workspace['optimization_bias']} ({workspace['optimization_bias_source']})\",\n"
+        "        f\"Advanced features: {', '.join(workspace['advanced_features']) or 'none'} ({workspace['advanced_features_source']})\",\n"
+        "        f\"CLI invoke: {workspace['cli_invoke']} ({workspace['cli_invoke_source']})\",\n"
+        "        f\"Wrapper rule: {payload['update']['wrapper_rule']}\",\n"
+        "        'Update modules:',\n"
+        "    ])\n"
+        "    for module in payload['update']['modules']:\n"
+        "        lines.append(f\"- {module['module']}: {module['source_type']} {module['source_ref']}\")\n"
+        "        lines.append(f\"  label: {module['source_label']}\")\n"
+        "        lines.append(f\"  metadata: {module['metadata_path']} ({module['sync_status']})\")\n"
+        "    lines.extend([\n"
+        "        'Mixed-agent:',\n"
+        "        f\"- rule: {mixed_agent['rule']}\",\n"
+        "        f\"- repo policy: {mixed_agent['repo_policy']['path']} ({mixed_agent['repo_policy']['source']})\",\n"
+        "        f\"- local override: {mixed_agent['local_override']['path']} ({mixed_agent['local_override']['status']})\",\n"
+        "        f\"- local integration area: {mixed_agent['local_integration_area']['root']} ({mixed_agent['local_integration_area']['status']})\",\n"
+        "        f\"- effective posture: internal delegation={mixed_agent['effective_posture']['supports_internal_delegation']['value']}, strong planner={mixed_agent['effective_posture']['strong_planner_available']['value']}, cheap bounded executor={mixed_agent['effective_posture']['cheap_bounded_executor_available']['value']}\",\n"
+        "        f\"- delegation targets: {len(mixed_agent['delegation_targets']['profiles'])} configured\",\n"
+        "        f\"- delegation outcome evidence: {mixed_agent['delegation_targets']['outcome_artifact']['path']} ({mixed_agent['delegation_targets']['outcome_artifact']['status']})\",\n"
+        "    ])\n"
+        "    return '\\n'.join(lines) + '\\n'\n"
+        "\n\n"
+    )
+
+
 def _python_local_runtime_generated_function(
     function: str,
     override: dict[str, Any],
@@ -904,6 +992,30 @@ def _python_local_runtime_generated_function(
             f"    from {source_import_module} import {function} as source_function\n\n"
             "    return source_function(values, arguments, context)\n"
         )
+    if implementation == "config_output":
+        selected_output_kind = str(override.get("selected_output_kind") or "command-generation/selected-output/v1")
+        tiny_config_kind = str(override.get("tiny_config_kind") or "agentic-workspace/config-tiny/v1")
+        return (
+            f"def {function}(values: dict[str, Any], _arguments: dict[str, Any], _context: Any) -> Any:\n"
+            "    result = values['result']\n"
+            "    output_format = str(values.get('format') or 'text')\n"
+            "    if not isinstance(result, dict):\n"
+            "        raise ValueError('workspace config output requires an object result payload')\n"
+            "    if output_format == 'json':\n"
+            "        print(json.dumps(_serialise_value(result), indent=2))\n"
+            "        return None\n"
+            f"    if result.get('kind') == {selected_output_kind!r}:\n"
+            "        print(_emit_selected_output_text(result), end='')\n"
+            "        return None\n"
+            f"    if result.get('kind') == {tiny_config_kind!r}:\n"
+            "        print(_emit_config_tiny_text(result), end='')\n"
+            "        return None\n"
+            "    if result.get('profile') == 'compact':\n"
+            "        print(_emit_config_compact_text(result), end='')\n"
+            "        return None\n"
+            "    print(_emit_config_full_text(result), end='')\n"
+            "    return None\n"
+        )
     raise ValueError(f"unsupported generated local runtime implementation: {implementation!r}")
 
 
@@ -933,6 +1045,8 @@ def _python_local_runtime_binding_module(
     helper_parts: list[str] = []
     if overrides:
         helper_parts.append(_python_local_runtime_helper_block())
+    if any(str(override.get("implementation")) == "config_output" for override in overrides.values()):
+        helper_parts.append(_python_config_output_helper_block())
     helper_block = "\n\n".join(helper_parts) + "\n\n" if helper_parts else ""
     helper_imports = ""
     if overrides:
