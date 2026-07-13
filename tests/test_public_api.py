@@ -1879,7 +1879,7 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             "items": ["alpha", "beta"],
             "records": [{"name": "one", "status": "ready"}],
             "warnings": ["check config"],
-            "metadata": {"source": "fixture", "city": "Malm\u00f6", "2": "b", "1": "a"},
+            "metadata": {"source": "fixture", "city": "Malm\u00f6", "10": "a", "2": "b", "nested": {"10": "inner-a", "2": "inner-b"}},
             "empty_object": {},
             "missing": [],
             "active": True,
@@ -1918,9 +1918,13 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "- check config\n"
         "Metadata:\n"
         "{\n"
-        '  "1": "a",\n'
+        '  "10": "a",\n'
         '  "2": "b",\n'
         '  "city": "Malm\u00f6",\n'
+        '  "nested": {\n'
+        '    "10": "inner-a",\n'
+        '    "2": "inner-b"\n'
+        "  },\n"
         '  "source": "fixture"\n'
         "}\n"
         "Record: one (ready)\n"
@@ -2002,6 +2006,55 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
     assert_generated_text_view_error(
         {"text_views": [{"id": "bad.number", "match": {"score": 1e-7}, "lines": ["Bad"]}]},
         "output.emit text view match values must be JSON scalars",
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {
+                    "id": "bad.view-field",
+                    "match": {"kind": "todo-list/v1"},
+                    "title": "unsupported",
+                    "lines": ["Bad"],
+                }
+            ]
+        },
+        "output.emit text view has unsupported fields",
+    )
+    assert_generated_text_view_error(
+        {"text_views": [{"id": "bad.literal-type", "match": {"kind": "todo-list/v1"}, "lines": [{"literal": {"a": 1}}]}]},
+        "output.emit literal line value must be a string",
+    )
+    assert_generated_text_view_error(
+        {"text_views": [{"id": "bad.template-type", "match": {"kind": "todo-list/v1"}, "lines": [{"template": 42}]}]},
+        "output.emit template line value must be a string",
+    )
+    assert_generated_text_view_error(
+        {"text_views": [{"id": "bad.json-path-type", "match": {"kind": "todo-list/v1"}, "lines": [{"json": ["metadata"]}]}]},
+        "output.emit json line path must be a string",
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {"id": "bad.when-path-type", "match": {"kind": "todo-list/v1"}, "lines": [{"when": ["warnings"], "lines": ["Bad"]}]}
+            ]
+        },
+        "output.emit when line path must be a string",
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {"id": "bad.for-each-path-type", "match": {"kind": "todo-list/v1"}, "lines": [{"for_each": {"path": ["warnings"], "template": "- {}"}}]}
+            ]
+        },
+        "output.emit for_each path must be a string",
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {"id": "bad.for-each-template-type", "match": {"kind": "todo-list/v1"}, "lines": [{"for_each": {"path": "warnings", "template": {"line": "- {}"}}}]}
+            ]
+        },
+        "output.emit for_each template must be a string",
     )
     assert_generated_text_view_error(
         {

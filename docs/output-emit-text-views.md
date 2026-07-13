@@ -11,6 +11,8 @@
 - `default`: truthy value marking the fallback view.
 - `lines`: list of text line declarations.
 
+Other view-level fields are rejected. Path-bearing and template-bearing line fields are strings: `literal`, `template`, `when`, `json`, `for_each.path`, and `for_each.template` do not accept arrays, objects, numbers, booleans, or null.
+
 The first matching view renders. If no view matches, the last declared default view renders. If neither exists, `output.emit` falls back to its built-in compact text behavior.
 
 `match` values are intentionally scalar-only: string, finite safe integer, boolean, or null. Arrays, objects, and non-integer or unsafe numeric values in `match` are rejected in every target. Actual result values are compared by explicit JSON scalar equality at exact dot paths, so booleans do not equal numbers.
@@ -60,8 +62,8 @@ Scalar formatting is portable:
 
 Portable number rendering is intentionally limited to finite safe integers. Non-integer numbers, infinities, NaN, and integers outside JavaScript's safe integer range are rejected in placeholders, `join`, `match`, and JSON text-view blocks.
 
-JSON blocks render with two-space indentation, recursively sorted object keys, and unescaped Unicode characters in Python and TypeScript generated runtimes.
+JSON blocks render with two-space indentation, recursively sorted object keys, and unescaped Unicode characters in Python and TypeScript generated runtimes. Sorting is lexicographic over string keys and is target-independent even for integer-index-like keys such as `"10"` and `"2"`.
 
 ## Failure Behavior
 
-Malformed `text_views` fail at runtime with an `output.emit` error instead of silently falling back. Rejected cases include non-list `text_views`, non-object view entries, non-list `lines`, unsupported filters, structured or unsafe-number `match` values, structured or unsafe-number direct placeholders, invalid `for_each` values, hidden invalid nested line declarations, and invalid `join` values.
+Malformed `text_views` fail at runtime with an `output.emit` error instead of silently falling back. Rejected cases include non-list `text_views`, non-object view entries, unsupported view fields, non-list `lines`, non-string path/template/literal line fields, unsupported filters, structured or unsafe-number `match` values, structured or unsafe-number direct placeholders, invalid `for_each` values, hidden invalid nested line declarations, and invalid `join` values.
