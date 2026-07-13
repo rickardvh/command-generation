@@ -1736,6 +1736,41 @@ def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics(
         sys.modules.pop(source_module.__name__, None)
 
 
+def test_generated_json_output_fallback_delegates_declared_text_views() -> None:
+    rendered = _python_local_runtime_binding_module(
+        {
+            "program": "demo-cli",
+            "python_runtime_binding": {
+                "operation_executor": {
+                    "handlers": [
+                        {
+                            "primitive": "output.emit",
+                            "handler": "runtime_handler",
+                            "import_module": "fake_source_runtime_for_text_views",
+                            "function": "emit_output",
+                        }
+                    ]
+                }
+            },
+        },
+        {
+            "source_import_module": "fake_source_runtime_for_text_views",
+            "module_file": "primitives.demo_runtime",
+            "generated_function_overrides": [
+                {
+                    "function": "emit_output",
+                    "implementation": "json_output_with_source_fallback",
+                }
+            ],
+        },
+        source_path="demo_ir.json",
+        regenerate_command="generate-demo",
+    )
+
+    assert "arguments.get('text_views')" in rendered
+    assert "print(_emit_output(values=values, arguments=arguments), end='')" in rendered
+
+
 def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and_help() -> None:
     runtime_module = types.ModuleType("fake_module_front_door_runtime")
     calls: list[list[str]] = []
