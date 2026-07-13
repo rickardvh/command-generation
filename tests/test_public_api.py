@@ -1789,6 +1789,8 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             {"name": "active", "arg": "active", "default": False},
             {"name": "score", "arg": "score", "default": 0},
             {"name": "flags", "arg": "flags", "default": []},
+            {"name": "first", "arg": "first", "default": ""},
+            {"name": "second", "arg": "second", "default": ""},
         ]
     )
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
@@ -1811,6 +1813,8 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
                         "active": {"$value": "active"},
                         "score": {"$value": "score"},
                         "flags": {"$value": "flags"},
+                        "first": {"$value": "first"},
+                        "second": {"$value": "second"},
                     }
                 }
             },
@@ -1833,6 +1837,7 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
                             "Profile: {profile}",
                             "Active: {active}",
                             "Score: {score}",
+                            "Single pass: {first} {second}",
                             "Flags: {flags|join:/}",
                             "Items: {items|join:, |empty:(none)}",
                             "Missing: {missing|join:, |empty:(none)}",
@@ -1885,6 +1890,8 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             "active": True,
             "score": 1.0,
             "flags": [True, False, "ok", 2.0],
+            "first": "{second}",
+            "second": "resolved",
         }
         py_text = py_executor.run_operation_callable(py_contract, values)
     finally:
@@ -1910,6 +1917,7 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "Profile: compact\n"
         "Active: true\n"
         "Score: 1\n"
+        "Single pass: {second} resolved\n"
         "Flags: true/false/ok/2\n"
         "Items: alpha, beta\n"
         "Missing: (none)\n"
