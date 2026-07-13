@@ -175,7 +175,11 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
         {
             "id": "output.emit",
             "kind": "portable",
-            "description": "Emit JSON or compact text from a result payload.",
+            "description": (
+                "Emit JSON or compact text from a result payload, including declared text_views "
+                "with scalar matching, scalar placeholders, list-of-scalar join, JSON-domain "
+                "truthiness, and explicit JSON blocks for arrays or objects."
+            ),
             "target_support": {"python": "implemented", "typescript": "implemented"},
         },
         {

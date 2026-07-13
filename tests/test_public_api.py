@@ -1786,6 +1786,9 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             {"name": "metadata", "arg": "metadata", "default": {}},
             {"name": "empty_object", "arg": "empty_object", "default": {}},
             {"name": "missing", "arg": "missing", "default": []},
+            {"name": "active", "arg": "active", "default": False},
+            {"name": "score", "arg": "score", "default": 0},
+            {"name": "flags", "arg": "flags", "default": []},
         ]
     )
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
@@ -1805,6 +1808,9 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
                         "metadata": {"$value": "metadata"},
                         "empty_object": {"$value": "empty_object"},
                         "missing": {"$value": "missing"},
+                        "active": {"$value": "active"},
+                        "score": {"$value": "score"},
+                        "flags": {"$value": "flags"},
                     }
                 }
             },
@@ -1820,6 +1826,9 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
                         "match": {"kind": "todo-list/v1", "profile": "compact"},
                         "lines": [
                             "Profile: {profile}",
+                            "Active: {active}",
+                            "Score: {score}",
+                            "Flags: {flags|join:/}",
                             "Items: {items|join:, |empty:(none)}",
                             "Missing: {missing|join:, |empty:(none)}",
                             "Warnings count: {warnings|len}",
@@ -1865,9 +1874,12 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             "items": ["alpha", "beta"],
             "records": [{"name": "one", "status": "ready"}],
             "warnings": ["check config"],
-            "metadata": {"source": "fixture"},
+            "metadata": {"source": "fixture", "city": "Malm\u00f6"},
             "empty_object": {},
             "missing": [],
+            "active": True,
+            "score": 1.0,
+            "flags": [True, False, "ok", 2.0],
         }
         py_text = py_executor.run_operation_callable(py_contract, values)
     finally:
@@ -1879,18 +1891,21 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
     runner = tmp_path / "invoke-text-view.mjs"
     runner.write_text(
         "import { invokeGeneratedOperation } from './todo_ts_pkg/src/runtime.mjs';\n"
-        f"const values = {json.dumps(values, sort_keys=True)};\n"
+        f"const values = {json.dumps(values)};\n"
         "const result = invokeGeneratedOperation({ operationId: 'todo.list.report', operationPath: 'operations/todo.list.report.json', values });\n"
         "process.stdout.write(JSON.stringify(result));\n",
         encoding="utf-8",
     )
-    ts_result = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, capture_output=True, check=False)
+    ts_result = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
     assert ts_result.returncode == 0, ts_result.stderr
     ts_text = json.loads(ts_result.stdout)
 
     assert py_text == ts_text
     assert py_text == (
         "Profile: compact\n"
+        "Active: true\n"
+        "Score: 1\n"
+        "Flags: true/false/ok/2\n"
         "Items: alpha, beta\n"
         "Missing: (none)\n"
         "Warnings count: 1\n"
@@ -1898,7 +1913,8 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "- check config\n"
         "Metadata:\n"
         "{\n"
-        '  "source": "fixture"\n'
+        '  "source": "fixture",\n'
+        '  "city": "Malm\u00f6"\n'
         "}\n"
         "Record: one (ready)\n"
         "Root profile: compact\n"
@@ -1917,39 +1933,65 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
                 sys.modules.pop(name, None)
     runner.write_text(
         "import { invokeGeneratedOperation } from './todo_ts_pkg/src/runtime.mjs';\n"
-        f"const values = {json.dumps(default_values, sort_keys=True)};\n"
+        f"const values = {json.dumps(default_values)};\n"
         "const result = invokeGeneratedOperation({ operationId: 'todo.list.report', operationPath: 'operations/todo.list.report.json', values });\n"
         "process.stdout.write(JSON.stringify(result));\n",
         encoding="utf-8",
     )
-    ts_default = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, capture_output=True, check=False)
+    ts_default = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
     assert ts_default.returncode == 0, ts_default.stderr
     assert py_default == json.loads(ts_default.stdout) == "Default profile: expanded\nItems: (none)\n"
 
-    for generated_operation in (
-        tmp_path / "todo_cli_pkg" / "operations" / "todo.list.report.json",
-        tmp_path / "todo_ts_pkg" / "resources" / "operations" / "todo.list.report.json",
-    ):
-        malformed = json.loads(generated_operation.read_text(encoding="utf-8"))
-        cast(dict[str, object], cast(list[object], cast(dict[str, object], malformed["ir_plan"])["steps"])[1])["arguments"] = {
-            "text_views": "not-a-list"
-        }
-        generated_operation.write_text(json.dumps(malformed, indent=2), encoding="utf-8")
+    def write_generated_emit_arguments(arguments: dict[str, object]) -> None:
+        for generated_operation in (
+            tmp_path / "todo_cli_pkg" / "operations" / "todo.list.report.json",
+            tmp_path / "todo_ts_pkg" / "resources" / "operations" / "todo.list.report.json",
+        ):
+            malformed = json.loads(generated_operation.read_text(encoding="utf-8"))
+            cast(dict[str, object], cast(list[object], cast(dict[str, object], malformed["ir_plan"])["steps"])[1])["arguments"] = arguments
+            generated_operation.write_text(json.dumps(malformed, indent=2), encoding="utf-8")
 
-    sys.path.insert(0, str(tmp_path))
-    try:
-        py_cli = importlib.import_module("todo_cli_pkg.cli")
-        py_executor = importlib.import_module("todo_cli_pkg.primitives.operation_executor")
-        with pytest.raises(Exception, match="output.emit text_views must be a list"):
-            py_executor.run_operation_callable(py_cli.generated_operation_contract("todo.list.report"), values)
-    finally:
-        sys.path.remove(str(tmp_path))
-        for name in list(sys.modules):
-            if name == "todo_cli_pkg" or name.startswith("todo_cli_pkg."):
-                sys.modules.pop(name, None)
-    malformed_ts = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, capture_output=True, check=False)
-    assert malformed_ts.returncode != 0
-    assert "output.emit text_views must be a list" in malformed_ts.stderr
+    def assert_generated_text_view_error(arguments: dict[str, object], expected_message: str) -> None:
+        write_generated_emit_arguments(arguments)
+        sys.path.insert(0, str(tmp_path))
+        try:
+            py_cli = importlib.import_module("todo_cli_pkg.cli")
+            py_executor = importlib.import_module("todo_cli_pkg.primitives.operation_executor")
+            with pytest.raises(Exception, match=expected_message):
+                py_executor.run_operation_callable(py_cli.generated_operation_contract("todo.list.report"), values)
+        finally:
+            sys.path.remove(str(tmp_path))
+            for name in list(sys.modules):
+                if name == "todo_cli_pkg" or name.startswith("todo_cli_pkg."):
+                    sys.modules.pop(name, None)
+        runner.write_text(
+            "import { invokeGeneratedOperation } from './todo_ts_pkg/src/runtime.mjs';\n"
+            f"const values = {json.dumps(values)};\n"
+            "const result = invokeGeneratedOperation({ operationId: 'todo.list.report', operationPath: 'operations/todo.list.report.json', values });\n"
+            "process.stdout.write(JSON.stringify(result));\n",
+            encoding="utf-8",
+        )
+        malformed_ts = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
+        assert malformed_ts.returncode != 0
+        assert expected_message in malformed_ts.stderr
+
+    assert_generated_text_view_error({"text_views": "not-a-list"}, "output.emit text_views must be a list")
+    assert_generated_text_view_error(
+        {"text_views": [{"id": "bad.match", "match": {"items": ["alpha"]}, "lines": ["Bad"]}]},
+        "output.emit text view match values must be JSON scalars",
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {"id": "bad.placeholder", "match": {"kind": "todo-list/v1"}, "lines": ["Metadata: {metadata}"]}
+            ]
+        },
+        "output.emit text view placeholders require JSON scalars",
+    )
+    assert_generated_text_view_error(
+        {"text_views": [{"id": "bad.join", "match": {"kind": "todo-list/v1"}, "lines": ["Records: {records|join:, }"]}]},
+        "output.emit join filter requires a list of JSON scalars",
+    )
 
 
 def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and_help() -> None:

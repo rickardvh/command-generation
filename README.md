@@ -35,6 +35,8 @@ The exported `BUILTIN_PORTABLE_PRIMITIVES` registry contains package-owned porta
 
 `payload.project` is the generic projection primitive for exact dot-path selected-output wrappers. See [Projection primitives](docs/projection-primitives.md) for its ownership boundary.
 
+`output.emit` is the generic JSON/text emission primitive. Declared `text_views` provide portable compact text rendering with scalar matching, scalar placeholders, list-of-scalar `join`, JSON-domain truthiness, iteration, and explicit JSON blocks for structured values. See [`output.emit` text views](docs/output-emit-text-views.md) for the rendering language and failure behavior.
+
 ## Public API
 
 - `load_command_package_ir(path, schema_path=None)` validates IR against the package-owned schema.

@@ -619,7 +619,7 @@ def test_output_emit_supports_declared_text_views(primitive_context: PrimitiveCo
     )
 
     assert emitted_text == (
-        "Enabled: True\n"
+        "Enabled: true\n"
         "Items: alpha, beta\n"
         "Record count: 1\n"
         "Values:\n"
