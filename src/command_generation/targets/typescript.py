@@ -589,14 +589,254 @@ function manifestPathList(value, source) {{
   }});
 }}
 
-function emitOutput(values) {{
+function emitOutput(values, args = {{}}) {{
   const result = values.result;
   if (String(values.format ?? 'text') === 'json') return `${{JSON.stringify(result, null, 2)}}\n`;
+  if (isObject(result)) {{
+    const declaredView = emitDeclaredTextView(result, args.text_views ?? []);
+    if (declaredView !== null) return declaredView;
+  }}
   if (!isObject(result)) return `${{result}}\n`;
   if (Array.isArray(result.files) && result.files.every((item) => typeof item === 'string')) return `${{result.files.join('\\n')}}\n`;
   const lines = [String(result.message ?? result.kind ?? '')];
   for (const action of (Array.isArray(result.actions) ? result.actions : [])) lines.push(`- ${{action.path ?? action.id ?? action.kind}}`);
   return `${{lines.join('\\n').trimEnd()}}\n`;
+}}
+
+function emitDeclaredTextView(result, views) {{
+  if (views === null || views === undefined) return null;
+  if (!Array.isArray(views)) throw new RuntimeError('output.emit text_views must be a list');
+  for (const view of views) {{
+    if (!isObject(view)) throw new RuntimeError('output.emit text_views entries must be objects');
+    validateDeclaredTextView(view);
+  }}
+  let defaultView = null;
+  for (const view of views) {{
+    if (view.default === true) defaultView = view;
+    if (declaredTextViewMatches(result, view)) return renderDeclaredTextView(result, view);
+  }}
+  return defaultView ? renderDeclaredTextView(result, defaultView) : null;
+}}
+
+function declaredTextViewMatches(result, view) {{
+  const match = view.match ?? {{}};
+  if (!isObject(match) || Object.keys(match).length === 0) return false;
+  for (const [path, expected] of Object.entries(match)) {{
+    if (!declaredTextIsScalar(expected)) throw new RuntimeError('output.emit text view match values must be JSON scalars');
+    const [found, actual] = fieldByPath(result, path);
+    if (!found || !declaredTextScalarEqual(actual, expected)) return false;
+  }}
+  return true;
+}}
+
+function validateDeclaredTextView(view) {{
+  const allowedViewKeys = new Set(['id', 'match', 'default', 'lines']);
+  if (Object.keys(view).some((key) => !allowedViewKeys.has(key))) throw new RuntimeError('output.emit text view has unsupported fields');
+  if (Object.prototype.hasOwnProperty.call(view, 'default') && typeof view.default !== 'boolean') throw new RuntimeError('output.emit text view default must be a boolean');
+  const match = view.match ?? {{}};
+  if (Object.prototype.hasOwnProperty.call(view, 'match') && !isObject(match)) throw new RuntimeError('output.emit text view match must be an object');
+  for (const expected of Object.values(match)) {{
+    if (!declaredTextIsScalar(expected)) throw new RuntimeError('output.emit text view match values must be JSON scalars');
+  }}
+  if (Object.prototype.hasOwnProperty.call(view, 'lines')) validateDeclaredTextLines(view.lines);
+}}
+
+function validateDeclaredTextLines(lines) {{
+  if (!Array.isArray(lines)) throw new RuntimeError('output.emit text view lines must be a list');
+  for (const line of lines) validateDeclaredTextLine(line);
+}}
+
+function validateDeclaredTextLine(line) {{
+  if (typeof line === 'string') return;
+  if (!isObject(line)) throw new RuntimeError('output.emit text view lines must be strings or objects');
+  const discriminators = ['when', 'for_each', 'json', 'template', 'literal'];
+  const present = discriminators.filter((key) => Object.prototype.hasOwnProperty.call(line, key));
+  if (present.length !== 1) throw new RuntimeError('output.emit text view line object must declare exactly one of when, for_each, json, template, or literal');
+  const key = present[0];
+  const keys = Object.keys(line).sort();
+  if (key === 'literal') {{
+    if (keys.length !== 1 || keys[0] !== 'literal') throw new RuntimeError('output.emit literal line must only declare literal');
+    requireDeclaredTextString(line.literal, 'output.emit literal line value must be a string');
+    return;
+  }}
+  if (key === 'template') {{
+    if (keys.length !== 1 || keys[0] !== 'template') throw new RuntimeError('output.emit template line must only declare template');
+    requireDeclaredTextString(line.template, 'output.emit template line value must be a string');
+    return;
+  }}
+  if (key === 'json') {{
+    if (keys.length !== 1 || keys[0] !== 'json') throw new RuntimeError('output.emit json line must only declare json');
+    requireDeclaredTextString(line.json, 'output.emit json line path must be a string');
+    return;
+  }}
+  if (key === 'when') {{
+    if (keys.length !== 2 || keys[0] !== 'lines' || keys[1] !== 'when') throw new RuntimeError('output.emit when line must declare when and lines');
+    requireDeclaredTextString(line.when, 'output.emit when line path must be a string');
+    validateDeclaredTextLines(line.lines);
+    return;
+  }}
+  const spec = line.for_each;
+  if (!isObject(spec)) throw new RuntimeError('output.emit for_each line must be an object');
+  if (!Object.prototype.hasOwnProperty.call(spec, 'path')) throw new RuntimeError('output.emit for_each line must declare path');
+  requireDeclaredTextString(spec.path, 'output.emit for_each path must be a string');
+  const nestedForms = ['lines', 'template'].filter((name) => Object.prototype.hasOwnProperty.call(spec, name));
+  if (nestedForms.length !== 1) throw new RuntimeError('output.emit for_each line must declare exactly one of lines or template');
+  const specKeys = Object.keys(spec).sort();
+  const expectedKeys = ['path', nestedForms[0]].sort();
+  if (specKeys.length !== 2 || specKeys[0] !== expectedKeys[0] || specKeys[1] !== expectedKeys[1]) throw new RuntimeError('output.emit for_each line has unsupported fields');
+  if (Object.prototype.hasOwnProperty.call(spec, 'lines')) validateDeclaredTextLines(spec.lines);
+  else requireDeclaredTextString(spec.template, 'output.emit for_each template must be a string');
+}}
+
+function requireDeclaredTextString(value, message) {{
+  if (typeof value !== 'string') throw new RuntimeError(message);
+}}
+
+function renderDeclaredTextView(result, view) {{
+  return `${{renderDeclaredTextLines(view.lines ?? [], result, result).join('\\n').trimEnd()}}\n`;
+}}
+
+function renderDeclaredTextLines(lines, current, root) {{
+  if (!Array.isArray(lines)) throw new RuntimeError('output.emit text view lines must be a list');
+  return lines.flatMap((line) => renderDeclaredTextLine(line, current, root));
+}}
+
+function renderDeclaredTextLine(line, current, root) {{
+  if (typeof line === 'string') return [renderDeclaredTextTemplate(line, current, root)];
+  if (!isObject(line)) throw new RuntimeError('output.emit text view lines must be strings or objects');
+  if (Object.prototype.hasOwnProperty.call(line, 'when')) {{
+    const [found, value] = declaredTextValue(line.when, current, root);
+    return found && declaredTextTruthy(value) ? renderDeclaredTextLines(line.lines ?? [], current, root) : [];
+  }}
+  if (Object.prototype.hasOwnProperty.call(line, 'for_each')) {{
+    const spec = line.for_each;
+    if (!isObject(spec)) throw new RuntimeError('output.emit for_each line must be an object');
+    const [found, value] = declaredTextValue(spec.path ?? '', current, root);
+    if (!found || value === null || value === undefined || value === '') return [];
+    if (!Array.isArray(value)) throw new RuntimeError('output.emit for_each path must resolve to a list');
+    const nestedLines = spec.lines ?? [String(spec.template ?? '{{}}')];
+    return value.flatMap((item) => renderDeclaredTextLines(nestedLines, item, root));
+  }}
+  if (Object.prototype.hasOwnProperty.call(line, 'json')) {{
+    const [found, value] = declaredTextValue(line.json, current, root);
+    return declaredTextCanonicalJsonString(declaredTextCanonicalJsonValue(found ? value : null)).split('\\n');
+  }}
+  if (Object.prototype.hasOwnProperty.call(line, 'template')) return [renderDeclaredTextTemplate(String(line.template), current, root)];
+  if (Object.prototype.hasOwnProperty.call(line, 'literal')) return [String(line.literal)];
+  throw new RuntimeError('output.emit text view line object must declare when, for_each, json, template, or literal');
+}}
+
+function renderDeclaredTextTemplate(template, current, root) {{
+  return String(template).replace(/\\{{([^}}]*)\\}}/g, (_match, token) => {{
+    const [found, value] = declaredTextPlaceholderValue(String(token), current, root);
+    return declaredTextFormat(found ? value : '');
+  }});
+}}
+
+function declaredTextPlaceholderValue(token, current, root) {{
+  const parts = String(token).split('|');
+  let [found, value] = declaredTextValue(parts[0], current, root);
+  for (const rawFilter of parts.slice(1)) {{
+    const separatorIndex = rawFilter.indexOf(':');
+    const name = separatorIndex === -1 ? rawFilter : rawFilter.slice(0, separatorIndex);
+    const argument = separatorIndex === -1 ? '' : rawFilter.slice(separatorIndex + 1);
+    if (name === 'len') {{
+      value = Array.isArray(value) ? value.length : 0;
+      found = true;
+    }} else if (name === 'join') {{
+      if (!found || value === null || value === undefined) {{
+        value = '';
+      }} else if (Array.isArray(value)) {{
+        if (!value.every(declaredTextIsScalar)) throw new RuntimeError('output.emit join filter requires a list of JSON scalars');
+        value = value.map(declaredTextFormatScalar).join(argument);
+      }} else {{
+        throw new RuntimeError('output.emit join filter requires a list');
+      }}
+      found = true;
+    }} else if (name === 'empty') {{
+      if (!declaredTextTruthy(value)) value = argument;
+      found = true;
+    }} else {{
+      throw new RuntimeError(`unsupported output.emit text view filter: ${{name}}`);
+    }}
+  }}
+  return [found, value];
+}}
+
+function declaredTextValue(path, current, root) {{
+  const pathText = String(path ?? '');
+  if (pathText === '' || pathText === '.') return [true, current];
+  if (pathText.startsWith('root.')) return fieldByPath(root, pathText.slice('root.'.length));
+  if (isObject(current)) {{
+    const [found, value] = fieldByPath(current, pathText);
+    if (found) return [true, value];
+  }}
+  return fieldByPath(root, pathText);
+}}
+
+function declaredTextTruthy(value) {{
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (isObject(value)) return Object.keys(value).length > 0;
+  if (typeof value === 'string') return value.length > 0;
+  return Boolean(value);
+}}
+
+function declaredTextFormat(value) {{
+  if (!declaredTextIsScalar(value)) throw new RuntimeError('output.emit text view placeholders require JSON scalars; use json lines for arrays or objects');
+  return declaredTextFormatScalar(value);
+}}
+
+function declaredTextIsScalar(value) {{
+  return value === null || value === undefined || ['string', 'boolean'].includes(typeof value) || declaredTextIsSafeInteger(value);
+}}
+
+function declaredTextIsSafeInteger(value) {{
+  return typeof value === 'number' && Number.isSafeInteger(value);
+}}
+
+function declaredTextScalarEqual(actual, expected) {{
+  if (expected === null || expected === undefined) return actual === null || actual === undefined;
+  if (typeof expected === 'boolean') return typeof actual === 'boolean' && actual === expected;
+  if (typeof expected === 'string') return typeof actual === 'string' && actual === expected;
+  if (declaredTextIsSafeInteger(expected)) return declaredTextIsSafeInteger(actual) && actual === expected;
+  return false;
+}}
+
+function declaredTextFormatScalar(value) {{
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (value === null || value === undefined) return '';
+  if (declaredTextIsSafeInteger(value)) return String(value);
+  return String(value);
+}}
+
+function declaredTextCanonicalJsonValue(value) {{
+  if (Array.isArray(value)) return value.map(declaredTextCanonicalJsonValue);
+  if (isObject(value)) {{
+    const out = {{}};
+    for (const key of Object.keys(value).sort()) out[key] = declaredTextCanonicalJsonValue(value[key]);
+    return out;
+  }}
+  if (value === null || value === undefined || ['string', 'boolean'].includes(typeof value)) return value;
+  if (declaredTextIsSafeInteger(value)) return value;
+  if (typeof value === 'number') throw new RuntimeError('output.emit text view JSON numbers must be finite safe integers');
+  return value;
+}}
+
+function declaredTextCanonicalJsonString(value, level = 0) {{
+  const indent = '  '.repeat(level);
+  const childIndent = '  '.repeat(level + 1);
+  if (Array.isArray(value)) {{
+    if (value.length === 0) return '[]';
+    return '[\\n' + value.map((item) => `${{childIndent}}${{declaredTextCanonicalJsonString(item, level + 1)}}`).join(',\\n') + '\\n' + indent + ']';
+  }}
+  if (isObject(value)) {{
+    const keys = Object.keys(value).sort();
+    if (keys.length === 0) return '{{}}';
+    return '{{\\n' + keys.map((key) => `${{childIndent}}${{JSON.stringify(key)}}: ${{declaredTextCanonicalJsonString(value[key], level + 1)}}`).join(',\\n') + '\\n' + indent + '}}';
+  }}
+  if (value === undefined) return 'null';
+  return JSON.stringify(value);
 }}
 
 function limitedViewValue(value, limit) {{
@@ -706,7 +946,7 @@ function executePrimitive(primitive, values, args, operationId) {{
   if (primitive === 'payload.assemble') return assemblePayload(values, args);
   if (primitive === 'payload.view') return viewPayload(values, args);
   if (primitive === 'payload.project') return projectPayload(values, args);
-  if (primitive === 'output.emit') return emitOutput(values);
+  if (primitive === 'output.emit') return emitOutput(values, args);
   if (primitive === 'transaction.plan') return transactionPlan(values, args);
   return executeHostPrimitive(primitive, values, args, operationId);
 }}
