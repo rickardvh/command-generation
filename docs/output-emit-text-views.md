@@ -8,10 +8,10 @@
 
 - `id`: optional view identifier for host documentation and review.
 - `match`: object mapping dot paths to expected JSON scalar values.
-- `default`: truthy value marking the fallback view.
+- `default`: boolean marking the fallback view when `true`.
 - `lines`: list of text line declarations.
 
-Other view-level fields are rejected. Path-bearing and template-bearing line fields are strings: `literal`, `template`, `when`, `json`, `for_each.path`, and `for_each.template` do not accept arrays, objects, numbers, booleans, or null.
+Other view-level fields are rejected. `default` must be a boolean when present. Path-bearing and template-bearing line fields are strings: `literal`, `template`, `when`, `json`, `for_each.path`, and `for_each.template` do not accept arrays, objects, numbers, booleans, or null.
 
 The first matching view renders. If no view matches, the last declared default view renders. If neither exists, `output.emit` falls back to its built-in compact text behavior.
 
@@ -66,4 +66,4 @@ JSON blocks render with two-space indentation, recursively sorted object keys, a
 
 ## Failure Behavior
 
-Malformed `text_views` fail at runtime with an `output.emit` error instead of silently falling back. Rejected cases include non-list `text_views`, non-object view entries, unsupported view fields, non-list `lines`, non-string path/template/literal line fields, unsupported filters, structured or unsafe-number `match` values, structured or unsafe-number direct placeholders, invalid `for_each` values, hidden invalid nested line declarations, and invalid `join` values.
+Malformed `text_views` fail at runtime with an `output.emit` error instead of silently falling back. Rejected cases include non-list `text_views`, non-object view entries, unsupported view fields, non-boolean `default` values, non-list `lines`, non-string path/template/literal line fields, unsupported filters, structured or unsafe-number `match` values, structured or unsafe-number direct placeholders, invalid `for_each` values, hidden invalid nested line declarations, and invalid `join` values.

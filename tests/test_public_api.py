@@ -2021,6 +2021,10 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "output.emit text view has unsupported fields",
     )
     assert_generated_text_view_error(
+        {"text_views": [{"id": "bad.default-type", "default": [], "lines": ["Bad"]}]},
+        "output.emit text view default must be a boolean",
+    )
+    assert_generated_text_view_error(
         {"text_views": [{"id": "bad.literal-type", "match": {"kind": "todo-list/v1"}, "lines": [{"literal": {"a": 1}}]}]},
         "output.emit literal line value must be a string",
     )
