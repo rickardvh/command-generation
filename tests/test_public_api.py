@@ -1822,6 +1822,11 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             "arguments": {
                 "text_views": [
                     {
+                        "id": "fixture.bool-number-mismatch",
+                        "match": {"active": 1},
+                        "lines": ["Wrong view"],
+                    },
+                    {
                         "id": "fixture.compact",
                         "match": {"kind": "todo-list/v1", "profile": "compact"},
                         "lines": [
@@ -1874,7 +1879,7 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             "items": ["alpha", "beta"],
             "records": [{"name": "one", "status": "ready"}],
             "warnings": ["check config"],
-            "metadata": {"source": "fixture", "city": "Malm\u00f6"},
+            "metadata": {"source": "fixture", "city": "Malm\u00f6", "2": "b", "1": "a"},
             "empty_object": {},
             "missing": [],
             "active": True,
@@ -1913,8 +1918,10 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "- check config\n"
         "Metadata:\n"
         "{\n"
-        '  "source": "fixture",\n'
-        '  "city": "Malm\u00f6"\n'
+        '  "1": "a",\n'
+        '  "2": "b",\n'
+        '  "city": "Malm\u00f6",\n'
+        '  "source": "fixture"\n'
         "}\n"
         "Record: one (ready)\n"
         "Root profile: compact\n"
@@ -1992,6 +1999,83 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         {"text_views": [{"id": "bad.join", "match": {"kind": "todo-list/v1"}, "lines": ["Records: {records|join:, }"]}]},
         "output.emit join filter requires a list of JSON scalars",
     )
+    assert_generated_text_view_error(
+        {"text_views": [{"id": "bad.number", "match": {"score": 1e-7}, "lines": ["Bad"]}]},
+        "output.emit text view match values must be JSON scalars",
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {
+                    "id": "bad.hidden-line",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [
+                        {
+                            "when": "empty_object",
+                            "lines": [{"template": "Hidden", "literal": "Invalid"}],
+                        }
+                    ],
+                }
+            ]
+        },
+        "output.emit text view line object must declare exactly one of when, for_each, json, template, or literal",
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {
+                    "id": "bad.for-each",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [
+                        {
+                            "for_each": {
+                                "path": "warnings",
+                                "template": "- {}",
+                                "lines": ["- {}"],
+                            }
+                        }
+                    ],
+                }
+            ]
+        },
+        "output.emit for_each line must declare exactly one of lines or template",
+    )
+    bad_json_number_values = {**values, "metadata": {"small": 1e-7}}
+    write_generated_emit_arguments(
+        {
+            "text_views": [
+                {
+                    "id": "bad.json-number",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [{"json": "metadata"}],
+                }
+            ]
+        }
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        py_cli = importlib.import_module("todo_cli_pkg.cli")
+        py_executor = importlib.import_module("todo_cli_pkg.primitives.operation_executor")
+        with pytest.raises(Exception, match="output.emit text view JSON numbers must be finite safe integers"):
+            py_executor.run_operation_callable(
+                py_cli.generated_operation_contract("todo.list.report"),
+                bad_json_number_values,
+            )
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in list(sys.modules):
+            if name == "todo_cli_pkg" or name.startswith("todo_cli_pkg."):
+                sys.modules.pop(name, None)
+    runner.write_text(
+        "import { invokeGeneratedOperation } from './todo_ts_pkg/src/runtime.mjs';\n"
+        f"const values = {json.dumps(bad_json_number_values)};\n"
+        "const result = invokeGeneratedOperation({ operationId: 'todo.list.report', operationPath: 'operations/todo.list.report.json', values });\n"
+        "process.stdout.write(JSON.stringify(result));\n",
+        encoding="utf-8",
+    )
+    bad_json_number_ts = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
+    assert bad_json_number_ts.returncode != 0
+    assert "output.emit text view JSON numbers must be finite safe integers" in bad_json_number_ts.stderr
 
 
 def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and_help() -> None:

@@ -583,6 +583,7 @@ def test_output_emit_supports_declared_text_views(primitive_context: PrimitiveCo
         "kind": "fixture/report/v1",
         "profile": "compact",
         "enabled": True,
+        "score": 1,
         "items": ["alpha", "beta"],
         "records": [{"name": "one", "status": "ready"}],
         "values": {"status": "ok"},
@@ -595,10 +596,16 @@ def test_output_emit_supports_declared_text_views(primitive_context: PrimitiveCo
         arguments={
             "text_views": [
                 {
+                    "id": "fixture.bool-number-mismatch",
+                    "match": {"enabled": 1},
+                    "lines": ["Wrong view"],
+                },
+                {
                     "id": "fixture.compact",
                     "match": {"kind": "fixture/report/v1", "profile": "compact"},
                     "lines": [
                         "Enabled: {enabled}",
+                        "Score: {score}",
                         "Items: {items|join:, |empty:(none)}",
                         "Record count: {records|len}",
                         {"literal": "Values:"},
@@ -620,6 +627,7 @@ def test_output_emit_supports_declared_text_views(primitive_context: PrimitiveCo
 
     assert emitted_text == (
         "Enabled: true\n"
+        "Score: 1\n"
         "Items: alpha, beta\n"
         "Record count: 1\n"
         "Values:\n"
