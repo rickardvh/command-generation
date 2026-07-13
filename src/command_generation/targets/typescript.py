@@ -660,7 +660,7 @@ function renderDeclaredTextLine(line, current, root) {{
 }}
 
 function renderDeclaredTextTemplate(template, current, root) {{
-  return String(template).replace(/\\{{([^}}]+)\\}}/g, (_match, token) => {{
+  return String(template).replace(/\\{{([^}}]*)\\}}/g, (_match, token) => {{
     const [found, value] = declaredTextPlaceholderValue(String(token), current, root);
     return declaredTextFormat(found ? value : '');
   }});
@@ -701,6 +701,10 @@ function declaredTextValue(path, current, root) {{
 }}
 
 function declaredTextTruthy(value) {{
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (isObject(value)) return Object.keys(value).length > 0;
+  if (typeof value === 'string') return value.length > 0;
   return Boolean(value);
 }}
 
