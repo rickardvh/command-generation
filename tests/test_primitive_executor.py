@@ -426,7 +426,7 @@ def test_transaction_plan_rejects_paths_outside_relative_resource_namespace(prim
             )
 
 
-def test_payload_project_selects_exact_paths_and_reports_missing(primitive_context: PrimitiveContext) -> None:
+def test_payload_project_rejects_unknown_selectors_atomically(primitive_context: PrimitiveContext) -> None:
     result = execute_primitive(
         "payload.project",
         values={
@@ -440,11 +440,18 @@ def test_payload_project_selects_exact_paths_and_reports_missing(primitive_conte
         context=primitive_context,
     )
 
-    assert result["kind"] == "command-generation/selected-output/v1"
+    assert result["kind"] == "command-generation/selector-validation-error/v1"
+    assert result["status"] == "invalid-selector"
     assert result["source_command"] == "fixture.show"
-    assert result["values"] == {"items.0.name": "alpha", "summary.count": 2}
-    assert result["missing"] == ["missing.value"]
-    assert "items.1.name" in result["available_selectors"]
+    assert result["requested_selectors"] == ["items.0.name", "summary.count", "missing.value"]
+    assert result["unknown_selectors"] == ["missing.value"]
+    assert "values" not in result
+    assert "available_selectors" not in result
+    assert result["selector_inventory"]["status"] == "omitted-from-validation-error"
+    assert result["selector_inventory"]["available_count"] >= 4
+    assert len(result["selector_inventory"]["sample"]) <= result["selector_inventory"]["sample_limit"]
+    assert "fixture.show --select" in result["selector_inventory"]["discovery_command"]
+    assert result["suggestions"]["missing.value"]
 
 
 def test_payload_project_can_use_declared_selector_list(primitive_context: PrimitiveContext) -> None:
@@ -470,6 +477,24 @@ def test_payload_project_can_use_declared_selector_list(primitive_context: Primi
         "source_command": "fixture.status",
         "values": {"status": "ready", "details.owner": "fixture"},
     }
+
+
+def test_payload_project_uses_host_validation_error_kind(primitive_context: PrimitiveContext) -> None:
+    result = execute_primitive(
+        "payload.project",
+        values={"payload": {"status": "ready"}},
+        arguments={
+            "source": "payload",
+            "source_command": "fixture.status",
+            "selectors": ["status", "missing"],
+            "selected_output_kind": "fixture/selected-output/v1",
+        },
+        context=primitive_context,
+    )
+
+    assert result["kind"] == "fixture/selector-validation-error/v1"
+    assert result["unknown_selectors"] == ["missing"]
+    assert "values" not in result
 
 
 def test_operation_fragments_compose_reusable_step_groups(primitive_context: PrimitiveContext) -> None:

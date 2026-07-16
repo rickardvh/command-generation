@@ -1041,9 +1041,13 @@ def _project_payload(*, values: dict[str, Any], arguments: dict[str, Any]) -> di
         else:
             missing.append(selector)
     if missing:
-        selected["missing"] = missing
-        selected["selector_rule"] = "Comma-separated dot paths select exact JSON fields; unknown fields are reported in missing."
-        selected["available_selectors"] = _available_selectors_for_payload(payload)
+        return _selector_validation_error(
+            payload=payload,
+            selectors=selectors,
+            missing=missing,
+            source_command=source_command,
+            selected_output_kind=selected_output_kind,
+        )
     return selected
 
 
@@ -1055,6 +1059,57 @@ def _projection_selectors(*, values: dict[str, Any], arguments: dict[str, Any]) 
     if isinstance(raw_selectors, Sequence) and not isinstance(raw_selectors, (str, bytes, bytearray)):
         return [str(item).strip() for item in raw_selectors if str(item).strip()]
     return [token.strip() for token in str(raw_selectors or "").split(",") if token.strip()]
+
+
+def _selector_validation_kind(selected_output_kind: str) -> str:
+    if "/selected-output/" in selected_output_kind:
+        return selected_output_kind.replace("/selected-output/", "/selector-validation-error/")
+    if selected_output_kind.endswith("/selected-output"):
+        return f"{selected_output_kind.removesuffix('/selected-output')}/selector-validation-error"
+    return "command-generation/selector-validation-error/v1"
+
+
+def _selector_suggestions(unknown: str, available: list[str], *, limit: int = 3) -> list[str]:
+    terms = [part for part in unknown.replace("_", ".").split(".") if part]
+    matches: list[str] = []
+    for selector in available:
+        selector_terms = selector.split(".")
+        if unknown in selector or any(term in selector_terms or term in selector for term in terms):
+            matches.append(selector)
+        if len(matches) >= limit:
+            return matches
+    return available[:limit]
+
+
+def _selector_validation_error(
+    *,
+    payload: Any,
+    selectors: list[str],
+    missing: list[str],
+    source_command: str,
+    selected_output_kind: str,
+) -> dict[str, Any]:
+    available = _available_selectors_for_payload(payload)
+    sample_limit = 8
+    command_ref = source_command or "<command>"
+    return {
+        "kind": _selector_validation_kind(selected_output_kind),
+        "status": "invalid-selector",
+        "source_command": source_command,
+        "requested_selectors": selectors,
+        "unknown_selectors": missing,
+        "selector_inventory": {
+            "status": "omitted-from-validation-error",
+            "available_count": len(available),
+            "sample": available[:sample_limit],
+            "sample_limit": sample_limit,
+            "discovery_command": f"{command_ref} --select <field[,field...]> --format json",
+            "inventory_command": f"{command_ref} --verbose --format json",
+            "rule": "Full selector inventories are omitted from validation errors; use the inventory command for complete details.",
+        },
+        "suggestions": {selector: _selector_suggestions(selector, available) for selector in missing},
+        "validation_rule": "Selector requests are atomic: any unknown selector prevents partial projection output.",
+    }
 
 
 def _plain_output_result(result: Any) -> Any:

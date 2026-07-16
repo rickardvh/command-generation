@@ -169,7 +169,7 @@ BUILTIN_PORTABLE_PRIMITIVES = PrimitiveRegistry.from_definitions(
         {
             "id": "payload.project",
             "kind": "portable",
-            "description": "Project exact dot-path selectors from a payload into a generic selected-output wrapper.",
+            "description": "Project exact dot-path selectors atomically, returning a bounded validation error for unknown selectors.",
             "target_support": {"python": "implemented", "typescript": "implemented"},
         },
         {

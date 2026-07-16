@@ -496,6 +496,52 @@ function availableSelectorsForPayload(payload, prefix = '') {{
   return selectors;
 }}
 
+function selectorValidationKind(selectedOutputKind) {{
+  const kind = String(selectedOutputKind ?? '');
+  if (kind.includes('/selected-output/')) return kind.replace('/selected-output/', '/selector-validation-error/');
+  if (kind.endsWith('/selected-output')) return `${{kind.slice(0, -'/selected-output'.length)}}/selector-validation-error`;
+  return 'command-generation/selector-validation-error/v1';
+}}
+
+function selectorSuggestions(unknown, available, limit = 3) {{
+  const terms = String(unknown).replaceAll('_', '.').split('.').filter(Boolean);
+  const matches = [];
+  for (const selector of available) {{
+    const selectorTerms = String(selector).split('.');
+    if (String(selector).includes(String(unknown)) || terms.some((term) => selectorTerms.includes(term) || String(selector).includes(term))) {{
+      matches.push(selector);
+    }}
+    if (matches.length >= limit) return matches;
+  }}
+  return available.slice(0, limit);
+}}
+
+function selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind) {{
+  const available = availableSelectorsForPayload(payload);
+  const sampleLimit = 8;
+  const commandRef = sourceCommand || '<command>';
+  const suggestions = {{}};
+  for (const selector of missing) suggestions[selector] = selectorSuggestions(selector, available);
+  return {{
+    kind: selectorValidationKind(selectedOutputKind),
+    status: 'invalid-selector',
+    source_command: sourceCommand,
+    requested_selectors: selectors,
+    unknown_selectors: missing,
+    selector_inventory: {{
+      status: 'omitted-from-validation-error',
+      available_count: available.length,
+      sample: available.slice(0, sampleLimit),
+      sample_limit: sampleLimit,
+      discovery_command: `${{commandRef}} --select <field[,field...]> --format json`,
+      inventory_command: `${{commandRef}} --verbose --format json`,
+      rule: 'Full selector inventories are omitted from validation errors; use the inventory command for complete details.'
+    }},
+    suggestions,
+    validation_rule: 'Selector requests are atomic: any unknown selector prevents partial projection output.'
+  }};
+}}
+
 function projectPayload(values, args) {{
   const sourceName = String(args.source ?? 'result');
   if (!Object.prototype.hasOwnProperty.call(values, sourceName)) throw new RuntimeError(`payload.project source value is missing: ${{sourceName}}`);
@@ -503,9 +549,11 @@ function projectPayload(values, args) {{
   const selectValueName = String(args.select_value ?? 'select');
   const selectors = selectorTokens(args.selectors ?? values[selectValueName]);
   if (selectors.length === 0) return payload;
+  const selectedOutputKind = String(args.selected_output_kind ?? 'command-generation/selected-output/v1');
+  const sourceCommand = String(args.source_command ?? values.operation_id ?? '');
   const selected = {{
-    kind: String(args.selected_output_kind ?? 'command-generation/selected-output/v1'),
-    source_command: String(args.source_command ?? values.operation_id ?? ''),
+    kind: selectedOutputKind,
+    source_command: sourceCommand,
     values: {{}}
   }};
   const missing = [];
@@ -515,9 +563,7 @@ function projectPayload(values, args) {{
     else missing.push(selector);
   }}
   if (missing.length) {{
-    selected.missing = missing;
-    selected.selector_rule = 'Comma-separated dot paths select exact JSON fields; unknown fields are reported in missing.';
-    selected.available_selectors = availableSelectorsForPayload(payload);
+    return selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind);
   }}
   return selected;
 }}
