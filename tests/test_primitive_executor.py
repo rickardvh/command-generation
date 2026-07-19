@@ -544,6 +544,49 @@ def test_payload_project_rejects_unknown_selectors_atomically(
     assert result["suggestions"]["missing.value"]
 
 
+def test_payload_project_rejects_selector_request_limit_violations(
+    primitive_context: PrimitiveContext,
+) -> None:
+    too_many = [f"field{i}" for i in range(33)]
+    result = execute_primitive(
+        "payload.project",
+        values={"payload": {f"field{i}": i for i in range(33)}},
+        arguments={
+            "source": "payload",
+            "source_command": "fixture.status",
+            "selectors": too_many,
+            "selected_output_kind": "fixture/selected-output/v1",
+        },
+        context=primitive_context,
+    )
+
+    assert result["kind"] == "fixture/selector-validation-error/v1"
+    assert result["status"] == "invalid-selector-request"
+    assert result["requested_selectors"] == too_many[:32]
+    assert result["selector_request"]["reason"] == "too-many-selectors"
+    assert result["selector_request"]["requested_selector_count"] == 33
+    assert result["selector_request"]["max_selectors"] == 32
+    assert "values" not in result
+
+    overlong_selector = "a" * 257
+    result = execute_primitive(
+        "payload.project",
+        values={"payload": {"status": "ready"}},
+        arguments={
+            "source": "payload",
+            "source_command": "fixture.status",
+            "selectors": [overlong_selector],
+        },
+        context=primitive_context,
+    )
+
+    assert result["status"] == "invalid-selector-request"
+    assert result["requested_selectors"] == []
+    assert result["selector_request"]["reason"] == "selector-too-long"
+    assert result["selector_request"]["selector_length"] == 257
+    assert result["selector_request"]["max_selector_length"] == 256
+
+
 def test_payload_project_can_use_declared_selector_list(
     primitive_context: PrimitiveContext,
 ) -> None:

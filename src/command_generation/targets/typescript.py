@@ -498,46 +498,124 @@ function fieldByPath(root, dottedPath) {{
   return [true, current];
 }}
 
-function selectorTokens(value) {{
-  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
-  return String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+const MAX_PROJECTION_SELECTORS = 32;
+const MAX_PROJECTION_SELECTOR_LENGTH = 256;
+const SELECTOR_INVENTORY_SAMPLE_LIMIT = 8;
+const SELECTOR_SUGGESTION_LIMIT = 3;
+
+function selectorLimitError(reason, requestedSelectorCount, selectorIndex = null, selectorLength = null) {{
+  const error = {{
+    reason,
+    requested_selector_count: requestedSelectorCount,
+    max_selectors: MAX_PROJECTION_SELECTORS,
+    max_selector_length: MAX_PROJECTION_SELECTOR_LENGTH
+  }};
+  if (selectorIndex !== null) error.selector_index = selectorIndex;
+  if (selectorLength !== null) error.selector_length = selectorLength;
+  return error;
 }}
 
-function availableSelectorsForPayload(payload, prefix = '') {{
+function selectorTokensFromArray(value) {{
   const selectors = [];
-  if (isObject(payload)) {{
-    for (const key of Object.keys(payload).map(String).sort()) {{
-      const path = prefix ? `${{prefix}}.${{key}}` : key;
-      selectors.push(path);
-      selectors.push(...availableSelectorsForPayload(payload[key], path));
+  let requestedSelectorCount = 0;
+  for (const item of value) {{
+    const token = String(item).trim();
+    if (!token) continue;
+    requestedSelectorCount += 1;
+    if (requestedSelectorCount > MAX_PROJECTION_SELECTORS) {{
+      return {{ selectors, error: selectorLimitError('too-many-selectors', requestedSelectorCount, requestedSelectorCount - 1) }};
     }}
-  }} else if (Array.isArray(payload)) {{
-    for (const [index, item] of payload.slice(0, 10).entries()) {{
-      const path = prefix ? `${{prefix}}.${{index}}` : String(index);
-      selectors.push(path);
-      selectors.push(...availableSelectorsForPayload(item, path));
+    if (token.length > MAX_PROJECTION_SELECTOR_LENGTH) {{
+      return {{ selectors, error: selectorLimitError('selector-too-long', requestedSelectorCount, requestedSelectorCount - 1, token.length) }};
+    }}
+    selectors.push(token);
+  }}
+  return {{ selectors, error: null }};
+}}
+
+function selectorTokensFromString(value) {{
+  const selectors = [];
+  let requestedSelectorCount = 0;
+  let token = '';
+  let pendingWhitespace = 0;
+  let seenNonWhitespace = false;
+  function appendSelector() {{
+    if (!token) return null;
+    requestedSelectorCount += 1;
+    if (requestedSelectorCount > MAX_PROJECTION_SELECTORS) {{
+      token = '';
+      pendingWhitespace = 0;
+      return selectorLimitError('too-many-selectors', requestedSelectorCount, requestedSelectorCount - 1);
+    }}
+    selectors.push(token);
+    token = '';
+    pendingWhitespace = 0;
+    return null;
+  }}
+  for (const char of String(value ?? '')) {{
+    if (char === ',') {{
+      const error = appendSelector();
+      if (error) return {{ selectors, error }};
+      seenNonWhitespace = false;
+      continue;
+    }}
+    if (/\\s/u.test(char) && !seenNonWhitespace) continue;
+    if (/\\s/u.test(char)) {{
+      pendingWhitespace += 1;
+      continue;
+    }}
+    if (pendingWhitespace) {{
+      token += ' '.repeat(pendingWhitespace);
+      pendingWhitespace = 0;
+    }}
+    seenNonWhitespace = true;
+    token += char;
+    if (token.length > MAX_PROJECTION_SELECTOR_LENGTH) {{
+      requestedSelectorCount += 1;
+      return {{
+        selectors,
+        error: selectorLimitError('selector-too-long', requestedSelectorCount, requestedSelectorCount - 1, token.length)
+      }};
     }}
   }}
-  return selectors;
+  return {{ selectors, error: appendSelector() }};
+}}
+
+function selectorTokens(value) {{
+  if (Array.isArray(value)) return selectorTokensFromArray(value);
+  return selectorTokensFromString(value);
 }}
 
 function selectorInventorySummary(payload, sampleLimit = 8) {{
   let count = 0;
   const sample = [];
-  const pending = [[payload, '']];
-  while (pending.length) {{
-    const [current, prefix] = pending.pop();
-    let entries = [];
-    if (isObject(current)) entries = Object.keys(current).map(String).sort().reverse().map((key) => [key, current[key]]);
-    else if (Array.isArray(current)) entries = current.map((value, index) => [String(index), value]).reverse();
-    else continue;
-    for (const [key, value] of entries) {{
-      const path = prefix ? `${{prefix}}.${{key}}` : key;
-      count += 1;
-      if (sample.length < sampleLimit) sample.push(path);
-      pending.push([value, path]);
+  function recordSample(path) {{
+    if (sampleLimit <= 0) return;
+    sample.push(path);
+    sample.sort();
+    if (sample.length > sampleLimit) sample.pop();
+  }}
+  function visit(current, prefix) {{
+    if (Array.isArray(current)) {{
+      for (let index = 0; index < current.length; index += 1) {{
+        const path = prefix ? `${{prefix}}.${{index}}` : String(index);
+        count += 1;
+        recordSample(path);
+        visit(current[index], path);
+      }}
+      return;
+    }}
+    if (isObject(current)) {{
+      for (const key in current) {{
+        if (!Object.prototype.hasOwnProperty.call(current, key)) continue;
+        const path = prefix ? `${{prefix}}.${{key}}` : key;
+        count += 1;
+        recordSample(path);
+        visit(current[key], path);
+      }}
     }}
   }}
+  visit(payload, '');
   return {{ count, sample }};
 }}
 
@@ -561,12 +639,11 @@ function selectorSuggestions(unknown, available, limit = 3) {{
   return available.slice(0, limit);
 }}
 
-function selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind) {{
-  const {{ count, sample: available }} = selectorInventorySummary(payload);
-  const sampleLimit = 8;
-  const commandRef = sourceCommand || '<command>';
+function selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind, discoveryCommand, detailCommand) {{
+  const sampleLimit = SELECTOR_INVENTORY_SAMPLE_LIMIT;
+  const {{ count, sample: available }} = selectorInventorySummary(payload, sampleLimit);
   const suggestions = {{}};
-  for (const selector of missing) suggestions[selector] = selectorSuggestions(selector, available);
+  for (const selector of missing) suggestions[selector] = selectorSuggestions(selector, available, SELECTOR_SUGGESTION_LIMIT);
   return {{
     kind: selectorValidationKind(selectedOutputKind),
     status: 'invalid-selector',
@@ -576,14 +653,25 @@ function selectorValidationError(payload, selectors, missing, sourceCommand, sel
     selector_inventory: {{
       status: 'omitted-from-validation-error',
       available_count: count,
-      sample: available.slice(0, sampleLimit),
+      sample: available,
       sample_limit: sampleLimit,
-      discovery_command: '',
-      inventory_command: '',
+      discovery_command: discoveryCommand,
+      inventory_command: detailCommand,
       rule: 'Full selector inventories are omitted from validation errors; use the inventory command for complete details.'
     }},
     suggestions,
     validation_rule: 'Selector requests are atomic: any unknown selector prevents partial projection output.'
+  }};
+}}
+
+function selectorRequestValidationError(selectors, requestError, sourceCommand, selectedOutputKind) {{
+  return {{
+    kind: selectorValidationKind(selectedOutputKind),
+    status: 'invalid-selector-request',
+    source_command: sourceCommand,
+    requested_selectors: selectors,
+    selector_request: {{ status: 'rejected', ...requestError }},
+    validation_rule: 'Selector requests are bounded and atomic: too many selectors or overlong selectors are rejected before projection.'
   }};
 }}
 
@@ -592,12 +680,16 @@ function projectPayload(values, args) {{
   if (!Object.prototype.hasOwnProperty.call(values, sourceName)) throw new RuntimeError(`payload.project source value is missing: ${{sourceName}}`);
   const payload = values[sourceName];
   const selectValueName = String(args.select_value ?? 'select');
-  const selectors = selectorTokens(args.selectors ?? values[selectValueName]);
-  if (selectors.length === 0) return payload;
   const selectedOutputKind = String(args.selected_output_kind ?? 'command-generation/selected-output/v1');
   const sourceCommand = String(args.source_command ?? values.operation_id ?? '');
+  const selectorRequest = selectorTokens(args.selectors ?? values[selectValueName]);
+  const selectors = selectorRequest.selectors;
+  if (selectorRequest.error) return selectorRequestValidationError(selectors, selectorRequest.error, sourceCommand, selectedOutputKind);
+  if (selectors.length === 0) return payload;
+  const discoveryCommand = String(args.selector_inventory_command ?? '');
+  const detailCommand = String(args.selector_detail_command ?? '');
   const missing = selectors.filter((selector) => !fieldByPath(payload, selector)[0]);
-  if (missing.length) return selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind);
+  if (missing.length) return selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind, discoveryCommand, detailCommand);
   const selected = {{ kind: selectedOutputKind, source_command: sourceCommand, values: {{}} }};
   for (const selector of selectors) {{
     const [found, value] = fieldByPath(payload, selector);

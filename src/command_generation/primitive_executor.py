@@ -852,7 +852,9 @@ def _render_declared_text_template(
 ) -> str:
     def replace(match: re.Match[str]) -> str:
         token = match.group(1)
-        found, value = _declared_text_placeholder_value(token, current=current, root=root)
+        found, value = _declared_text_placeholder_value(
+            token, current=current, root=root
+        )
         return _declared_text_format(value if found else "")
 
     return _DECLARED_TEXT_TEMPLATE_PATTERN.sub(replace, template)
@@ -1110,6 +1112,12 @@ def _validate_resource_path(path: str) -> str:
     return resource_path
 
 
+_MAX_PROJECTION_SELECTORS = 32
+_MAX_PROJECTION_SELECTOR_LENGTH = 256
+_SELECTOR_INVENTORY_SAMPLE_LIMIT = 8
+_SELECTOR_SUGGESTION_LIMIT = 3
+
+
 def _project_payload(
     *, values: dict[str, Any], arguments: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1125,7 +1133,16 @@ def _project_payload(
             f"payload.project source value is missing: {source_name!r}"
         )
     payload = values[source_name]
-    selectors = _projection_selectors(values=values, arguments=arguments)
+    selector_request = _projection_selectors(values=values, arguments=arguments)
+    selectors = selector_request["selectors"]
+    request_error = selector_request["error"]
+    if request_error is not None:
+        return _selector_request_validation_error(
+            selectors=selectors,
+            request_error=request_error,
+            source_command=source_command,
+            selected_output_kind=selected_output_kind,
+        )
     if not selectors:
         return _plain_output_result(payload)
     missing = [
@@ -1155,7 +1172,7 @@ def _project_payload(
 
 def _projection_selectors(
     *, values: dict[str, Any], arguments: dict[str, Any]
-) -> list[str]:
+) -> dict[str, Any]:
     raw_selectors = arguments.get("selectors")
     if raw_selectors is None:
         select_value_name = str(arguments.get("select_value") or "select")
@@ -1163,14 +1180,121 @@ def _projection_selectors(
     if isinstance(raw_selectors, Sequence) and not isinstance(
         raw_selectors, (str, bytes, bytearray)
     ):
-        tokens = [str(item).strip() for item in raw_selectors if str(item).strip()]
-    else:
-        tokens = [
-            token.strip()
-            for token in str(raw_selectors or "").split(",")
-            if token.strip()
-        ]
-    return [token[:256] for token in tokens[:32]]
+        return _projection_selectors_from_sequence(raw_selectors)
+    return _projection_selectors_from_string(str(raw_selectors or ""))
+
+
+def _projection_selector_result(
+    selectors: list[str], error: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    return {"selectors": selectors, "error": error}
+
+
+def _projection_selector_limit_error(
+    *,
+    reason: str,
+    requested_selector_count: int,
+    selector_index: int | None = None,
+    selector_length: int | None = None,
+) -> dict[str, Any]:
+    error: dict[str, Any] = {
+        "reason": reason,
+        "requested_selector_count": requested_selector_count,
+        "max_selectors": _MAX_PROJECTION_SELECTORS,
+        "max_selector_length": _MAX_PROJECTION_SELECTOR_LENGTH,
+    }
+    if selector_index is not None:
+        error["selector_index"] = selector_index
+    if selector_length is not None:
+        error["selector_length"] = selector_length
+    return error
+
+
+def _projection_selectors_from_sequence(raw_selectors: Sequence[Any]) -> dict[str, Any]:
+    selectors: list[str] = []
+    requested_selector_count = 0
+    for item in raw_selectors:
+        token = str(item).strip()
+        if not token:
+            continue
+        requested_selector_count += 1
+        if requested_selector_count > _MAX_PROJECTION_SELECTORS:
+            return _projection_selector_result(
+                selectors,
+                _projection_selector_limit_error(
+                    reason="too-many-selectors",
+                    requested_selector_count=requested_selector_count,
+                    selector_index=requested_selector_count - 1,
+                ),
+            )
+        if len(token) > _MAX_PROJECTION_SELECTOR_LENGTH:
+            return _projection_selector_result(
+                selectors,
+                _projection_selector_limit_error(
+                    reason="selector-too-long",
+                    requested_selector_count=requested_selector_count,
+                    selector_index=requested_selector_count - 1,
+                    selector_length=len(token),
+                ),
+            )
+        selectors.append(token)
+    return _projection_selector_result(selectors)
+
+
+def _projection_selectors_from_string(raw_selectors: str) -> dict[str, Any]:
+    selectors: list[str] = []
+    requested_selector_count = 0
+    token_chars: list[str] = []
+    pending_whitespace = 0
+    seen_non_whitespace = False
+
+    def append_selector() -> dict[str, Any] | None:
+        nonlocal requested_selector_count, token_chars, pending_whitespace
+        token = "".join(token_chars)
+        token_chars = []
+        pending_whitespace = 0
+        if not token:
+            return None
+        requested_selector_count += 1
+        if requested_selector_count > _MAX_PROJECTION_SELECTORS:
+            return _projection_selector_limit_error(
+                reason="too-many-selectors",
+                requested_selector_count=requested_selector_count,
+                selector_index=requested_selector_count - 1,
+            )
+        selectors.append(token)
+        return None
+
+    for char in raw_selectors:
+        if char == ",":
+            error = append_selector()
+            if error is not None:
+                return _projection_selector_result(selectors, error)
+            seen_non_whitespace = False
+            continue
+        if char.isspace() and not seen_non_whitespace:
+            continue
+        if char.isspace():
+            pending_whitespace += 1
+            continue
+        if pending_whitespace:
+            token_chars.extend(" " * pending_whitespace)
+            pending_whitespace = 0
+        seen_non_whitespace = True
+        token_chars.append(char)
+        if len(token_chars) > _MAX_PROJECTION_SELECTOR_LENGTH:
+            requested_selector_count += 1
+            return _projection_selector_result(
+                selectors,
+                _projection_selector_limit_error(
+                    reason="selector-too-long",
+                    requested_selector_count=requested_selector_count,
+                    selector_index=requested_selector_count - 1,
+                    selector_length=len(token_chars),
+                ),
+            )
+    error = append_selector()
+    return _projection_selector_result(selectors, error)
 
 
 def _selector_validation_kind(selected_output_kind: str) -> str:
@@ -1209,7 +1333,7 @@ def _selector_validation_error(
     discovery_command: str,
     detail_command: str,
 ) -> dict[str, Any]:
-    sample_limit = 8
+    sample_limit = _SELECTOR_INVENTORY_SAMPLE_LIMIT
     available_count, sample = _selector_inventory_summary(
         payload, sample_limit=sample_limit
     )
@@ -1229,10 +1353,32 @@ def _selector_validation_error(
             "rule": "Full selector inventories are omitted from validation errors; use the inventory command for complete details.",
         },
         "suggestions": {
-            selector: _selector_suggestions(selector, sample)
-            for selector in missing[:32]
+            selector: _selector_suggestions(
+                selector, sample, limit=_SELECTOR_SUGGESTION_LIMIT
+            )
+            for selector in missing
         },
         "validation_rule": "Selector requests are atomic: any unknown selector prevents partial projection output.",
+    }
+
+
+def _selector_request_validation_error(
+    *,
+    selectors: list[str],
+    request_error: dict[str, Any],
+    source_command: str,
+    selected_output_kind: str,
+) -> dict[str, Any]:
+    return {
+        "kind": _selector_validation_kind(selected_output_kind),
+        "status": "invalid-selector-request",
+        "source_command": source_command,
+        "requested_selectors": selectors,
+        "selector_request": {
+            "status": "rejected",
+            **request_error,
+        },
+        "validation_rule": "Selector requests are bounded and atomic: too many selectors or overlong selectors are rejected before projection.",
     }
 
 
@@ -1505,46 +1651,33 @@ def _selector_inventory_summary(
 ) -> tuple[int, list[str]]:
     count = 0
     sample: list[str] = []
-    pending: list[tuple[Any, str]] = [(payload, "")]
-    while pending:
-        current, prefix = pending.pop()
+
+    def record_sample(path: str) -> None:
+        if sample_limit <= 0:
+            return
+        sample.append(path)
+        sample.sort()
+        if len(sample) > sample_limit:
+            sample.pop()
+
+    def visit(current: Any, prefix: str) -> None:
+        nonlocal count
         if isinstance(current, Mapping):
-            entries = sorted(
-                ((str(key), value) for key, value in current.items()), reverse=True
-            )
+            entries = current.items()
         elif isinstance(current, Sequence) and not isinstance(
             current, (str, bytes, bytearray)
         ):
-            entries = [
-                (str(index), value)
-                for index, value in reversed(list(enumerate(current)))
-            ]
+            entries = enumerate(current)
         else:
-            continue
+            return
         for key, value in entries:
-            path = f"{prefix}.{key}" if prefix else key
+            path = f"{prefix}.{key}" if prefix else str(key)
             count += 1
-            if len(sample) < sample_limit:
-                sample.append(path)
-            pending.append((value, path))
+            record_sample(path)
+            visit(value, path)
+
+    visit(payload, "")
     return count, sample
-
-
-def _available_selectors_for_payload(payload: Any, prefix: str = "") -> list[str]:
-    selectors: list[str] = []
-    if isinstance(payload, Mapping):
-        for key in sorted(str(item) for item in payload):
-            path = f"{prefix}.{key}" if prefix else key
-            selectors.append(path)
-            selectors.extend(_available_selectors_for_payload(payload.get(key), path))
-    elif isinstance(payload, Sequence) and not isinstance(
-        payload, (str, bytes, bytearray)
-    ):
-        for index, item in enumerate(payload[:10]):
-            path = f"{prefix}.{index}" if prefix else str(index)
-            selectors.append(path)
-            selectors.extend(_available_selectors_for_payload(item, path))
-    return selectors
 
 
 def _resolve_inside(root: Path, relative: str) -> Path:

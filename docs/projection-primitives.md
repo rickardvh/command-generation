@@ -8,6 +8,8 @@ Command Generation owns only the mechanics:
 - split declared selector strings into exact dot paths;
 - resolve object fields and list indexes;
 - return a selected-output wrapper with `values` only when every requested selector resolves;
+- reject selector requests with more than 32 selectors or any selector longer
+  than 256 characters before projection;
 - return a bounded selector-validation error when any selector is unknown.
 
 Selector validation is atomic. A request with any unknown selector does not return
@@ -15,6 +17,10 @@ partial projected values. The validation error reports the requested selectors,
 the unknown selectors, a small selector sample, the available selector count,
 bounded suggestions, and discovery commands. It intentionally omits the complete
 selector catalog from the error path.
+
+Selector request validation is also atomic. A request that exceeds the selector
+count or selector length contract returns an `invalid-selector-request` error
+instead of dropping, truncating, or mutating selectors.
 
 Host packages own the semantics:
 
