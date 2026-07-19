@@ -47,10 +47,20 @@ from command_generation.target_extension import (
     current_target_proof_evidence_inventory,
     structured_target_proof_evidence_inventory,
 )
-from command_generation.conformance import TypescriptFunctionConformanceTarget, run_typescript_function_conformance_case
+from command_generation.conformance import (
+    TypescriptFunctionConformanceTarget,
+    run_typescript_function_conformance_case,
+)
 from command_generation.primitive_executor import PrimitiveContext, execute_primitive
-from command_generation.targets.contract import PYTHON_TARGET_LAYOUT_VERSION, TYPESCRIPT_TARGET_LAYOUT_VERSION
-from command_generation.targets.python import _python_command_module, _python_local_runtime_binding_module, _python_runtime_handler_module
+from command_generation.targets.contract import (
+    PYTHON_TARGET_LAYOUT_VERSION,
+    TYPESCRIPT_TARGET_LAYOUT_VERSION,
+)
+from command_generation.targets.python import (
+    _python_command_module,
+    _python_local_runtime_binding_module,
+    _python_runtime_handler_module,
+)
 
 
 def _maturity_policy() -> dict[str, object]:
@@ -77,7 +87,13 @@ def _maturity_policy() -> dict[str, object]:
             "completion_gate": {
                 "state": "satisfied",
                 "scope": "python-only",
-                "satisfied_by": [{"id": "fixture-conformance", "proof": "pytest", "evidence": "non-AW fixture test"}],
+                "satisfied_by": [
+                    {
+                        "id": "fixture-conformance",
+                        "proof": "pytest",
+                        "evidence": "non-AW fixture test",
+                    }
+                ],
             },
         },
         "generated_package_maturity": {
@@ -91,7 +107,7 @@ def _maturity_policy() -> dict[str, object]:
                     "weak_agent_routing": "allowed-read-only",
                     "runnable": True,
                 }
-            ]
+            ],
         },
         "non_python_runtime_binding": {
             "selected_model": "native runtime",
@@ -125,7 +141,12 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
                     "arguments": {"root": "todo.package-payload", "path": "todos.json"},
                     "outputs": ["todo_text"],
                 },
-                {"id": "parse_todos", "uses": "json.parse", "arguments": {"source": "todo_text"}, "outputs": ["todos"]},
+                {
+                    "id": "parse_todos",
+                    "uses": "json.parse",
+                    "arguments": {"source": "todo_text"},
+                    "outputs": ["todos"],
+                },
                 {
                     "id": "assemble",
                     "uses": "payload.assemble",
@@ -194,10 +215,18 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
                                 }
                             ],
                         },
-                        "operation_ref": {"id": "todo.list.report", "path": "operations/todo.list.report.json"},
+                        "operation_ref": {
+                            "id": "todo.list.report",
+                            "path": "operations/todo.list.report.json",
+                        },
                         "runtime_binding": {
                             "kind": "operation-primitive-sequence",
-                            "primitive_refs": ["filesystem.read", "json.parse", "payload.assemble", "output.emit"],
+                            "primitive_refs": [
+                                "filesystem.read",
+                                "json.parse",
+                                "payload.assemble",
+                                "output.emit",
+                            ],
                         },
                         "schemas": {"input": [], "output": []},
                         "effect_hints": {
@@ -221,17 +250,29 @@ def _fixture_manifest(tmp_path: Path) -> dict[str, object]:
                     "runtime_module_file": "cli",
                     "render_runtime_module": True,
                     "resource_copies": [
-                        {"source_root": "payload", "generated_root": "_payload", "required_marker": "todos.json"}
+                        {
+                            "source_root": "payload",
+                            "generated_root": "_payload",
+                            "required_marker": "todos.json",
+                        }
                     ],
                     "operation_executor": {
                         "module_file": "primitives.operation_executor",
                         "supported_operation_ids": ["todo.list.report"],
                         "initial_values": [
                             {"name": "format", "arg": "format", "default": "json"},
-                            {"name": "output_format", "arg": "format", "default": "json"},
+                            {
+                                "name": "output_format",
+                                "arg": "format",
+                                "default": "json",
+                            },
                         ],
                         "context_roots": [
-                            {"name": "todo.package-payload", "generated_root": "_payload", "required_marker": "todos.json"}
+                            {
+                                "name": "todo.package-payload",
+                                "generated_root": "_payload",
+                                "required_marker": "todos.json",
+                            }
                         ],
                         "handlers": [
                             {
@@ -267,7 +308,9 @@ def _fixture_manifest_with_typescript(tmp_path: Path) -> dict[str, object]:
     return manifest
 
 
-def _fixture_manifest_with_typescript_append_option(tmp_path: Path) -> dict[str, object]:
+def _fixture_manifest_with_typescript_append_option(
+    tmp_path: Path,
+) -> dict[str, object]:
     manifest = _fixture_manifest_with_typescript(tmp_path)
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
     command = cast(dict[str, object], cast(list[object], package["commands"])[0])
@@ -285,7 +328,12 @@ def _fixture_manifest_with_typescript_append_option(tmp_path: Path) -> dict[str,
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
     steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
     assemble = cast(dict[str, object], steps[2])
-    template = cast(dict[str, object], cast(dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"])["template"])
+    template = cast(
+        dict[str, object],
+        cast(
+            dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"]
+        )["template"],
+    )
     template["tags"] = {"$value": "tags"}
     operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
     return manifest
@@ -295,7 +343,10 @@ def _fixture_manifest_with_nested_cli_shapes(tmp_path: Path) -> dict[str, object
     manifest = _fixture_manifest_with_typescript(tmp_path)
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
     command = cast(dict[str, object], cast(list[object], package["commands"])[0])
-    operation_ref = {"id": "todo.list.report", "path": "operations/todo.list.report.json"}
+    operation_ref = {
+        "id": "todo.list.report",
+        "path": "operations/todo.list.report.json",
+    }
     command["interface"] = {
         "name": "list",
         "help": "List todos.",
@@ -332,7 +383,12 @@ def _fixture_manifest_with_nested_cli_shapes(tmp_path: Path) -> dict[str, object
             }
         ],
     }
-    operation_executor = cast(dict[str, object], cast(dict[str, object], package["python_runtime_binding"])["operation_executor"])
+    operation_executor = cast(
+        dict[str, object],
+        cast(dict[str, object], package["python_runtime_binding"])[
+            "operation_executor"
+        ],
+    )
     operation_executor["initial_values"] = [
         {"name": "format", "arg": "format", "default": "json"},
         {"name": "output_format", "arg": "format", "default": "json"},
@@ -342,8 +398,16 @@ def _fixture_manifest_with_nested_cli_shapes(tmp_path: Path) -> dict[str, object
     ]
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
-    assemble = cast(dict[str, object], cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])[2])
-    template = cast(dict[str, object], cast(dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"])["template"])
+    assemble = cast(
+        dict[str, object],
+        cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])[2],
+    )
+    template = cast(
+        dict[str, object],
+        cast(
+            dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"]
+        )["template"],
+    )
     template["project"] = {"$value": "project"}
     template["priority"] = {"$value": "priority"}
     template["tags"] = {"$value": "tags"}
@@ -351,7 +415,9 @@ def _fixture_manifest_with_nested_cli_shapes(tmp_path: Path) -> dict[str, object
     return manifest
 
 
-def _fixture_manifest_with_typescript_sample_edge_shapes(tmp_path: Path) -> dict[str, object]:
+def _fixture_manifest_with_typescript_sample_edge_shapes(
+    tmp_path: Path,
+) -> dict[str, object]:
     manifest = _fixture_manifest_with_typescript(tmp_path)
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
     command = cast(dict[str, object], cast(list[object], package["commands"])[0])
@@ -390,7 +456,12 @@ def _fixture_manifest_with_typescript_sample_edge_shapes(tmp_path: Path) -> dict
             },
         ],
     }
-    operation_executor = cast(dict[str, object], cast(dict[str, object], package["python_runtime_binding"])["operation_executor"])
+    operation_executor = cast(
+        dict[str, object],
+        cast(dict[str, object], package["python_runtime_binding"])[
+            "operation_executor"
+        ],
+    )
     operation_executor["initial_values"] = [
         {"name": "format", "arg": "format", "default": "json"},
         {"name": "output_format", "arg": "format", "default": "json"},
@@ -400,8 +471,16 @@ def _fixture_manifest_with_typescript_sample_edge_shapes(tmp_path: Path) -> dict
     ]
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
-    assemble = cast(dict[str, object], cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])[2])
-    template = cast(dict[str, object], cast(dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"])["template"])
+    assemble = cast(
+        dict[str, object],
+        cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])[2],
+    )
+    template = cast(
+        dict[str, object],
+        cast(
+            dict[str, object], cast(dict[str, object], assemble["arguments"])["fields"]
+        )["template"],
+    )
     template["count"] = {"$value": "count"}
     template["confirmed"] = {"$value": "confirmed"}
     template["limit"] = {"$value": "limit"}
@@ -409,7 +488,9 @@ def _fixture_manifest_with_typescript_sample_edge_shapes(tmp_path: Path) -> dict
     return manifest
 
 
-def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[str, object]:
+def _fixture_manifest_with_host_owned_python_primitive(
+    tmp_path: Path,
+) -> dict[str, object]:
     manifest = _fixture_manifest(tmp_path)
     (tmp_path / "todo_host_primitive_support.py").write_text(
         "def execute_host_primitive(primitive, *, values, arguments, context):\n"
@@ -423,7 +504,10 @@ def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[s
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
     command = cast(dict[str, object], cast(list[object], package["commands"])[0])
     runtime_binding = cast(dict[str, object], command["runtime_binding"])
-    runtime_binding["primitive_refs"] = [*cast(list[str], runtime_binding["primitive_refs"]), "todo.decorate"]
+    runtime_binding["primitive_refs"] = [
+        *cast(list[str], runtime_binding["primitive_refs"]),
+        "todo.decorate",
+    ]
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
     steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
@@ -440,7 +524,9 @@ def _fixture_manifest_with_host_owned_python_primitive(tmp_path: Path) -> dict[s
     return manifest
 
 
-def _fixture_manifest_with_host_owned_typescript_primitive(tmp_path: Path) -> dict[str, object]:
+def _fixture_manifest_with_host_owned_typescript_primitive(
+    tmp_path: Path,
+) -> dict[str, object]:
     manifest = _fixture_manifest_with_typescript(tmp_path)
     (tmp_path / "todoHostPrimitiveSupport.mjs").write_text(
         "export function executeHostPrimitive(primitive, values) {\n"
@@ -451,10 +537,17 @@ def _fixture_manifest_with_host_owned_typescript_primitive(tmp_path: Path) -> di
     )
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
     targets = cast(list[object], package["targets"])
-    package["targets"] = [target for target in targets if cast(dict[str, object], target)["kind"] == "typescript"]
+    package["targets"] = [
+        target
+        for target in targets
+        if cast(dict[str, object], target)["kind"] == "typescript"
+    ]
     command = cast(dict[str, object], cast(list[object], package["commands"])[0])
     runtime_binding = cast(dict[str, object], command["runtime_binding"])
-    runtime_binding["primitive_refs"] = [*cast(list[str], runtime_binding["primitive_refs"]), "todo.decorate"]
+    runtime_binding["primitive_refs"] = [
+        *cast(list[str], runtime_binding["primitive_refs"]),
+        "todo.decorate",
+    ]
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
     steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
@@ -480,14 +573,19 @@ def test_package_owned_schema_loads_fixture_manifest(tmp_path: Path) -> None:
     schema = json.loads(command_package_schema_path().read_text(encoding="utf-8"))
     assert schema["$id"] == "command-generation/command-package-ir.schema.json"
     assert schema["title"] == "Command Generation Command Package IR"
-    assert schema["properties"]["schema_version"]["const"] == "command-generation/command-package-ir/v1"
+    assert (
+        schema["properties"]["schema_version"]["const"]
+        == "command-generation/command-package-ir/v1"
+    )
     assert schema["x-command-generation-doc-role"] == "contract-reference"
     assert "x-agentic-workspace-doc-role" not in schema
     assert loaded["schema_version"] == "command-generation/command-package-ir/v1"
     assert loaded["packages"][0]["id"] == "todo-fixture"
 
 
-def test_package_owned_schema_accepts_legacy_aw_schema_version_alias(tmp_path: Path) -> None:
+def test_package_owned_schema_accepts_legacy_aw_schema_version_alias(
+    tmp_path: Path,
+) -> None:
     manifest = _fixture_manifest(tmp_path)
     manifest["schema_version"] = "agentic-workspace/command-package-ir/v1"
     manifest_path = tmp_path / "command_package_ir.json"
@@ -499,7 +597,9 @@ def test_package_owned_schema_accepts_legacy_aw_schema_version_alias(tmp_path: P
     assert loaded["packages"][0]["id"] == "todo-fixture"
 
 
-def test_loaded_legacy_schema_alias_renders_canonical_generation_metadata(tmp_path: Path) -> None:
+def test_loaded_legacy_schema_alias_renders_canonical_generation_metadata(
+    tmp_path: Path,
+) -> None:
     manifest = _fixture_manifest(tmp_path)
     manifest["schema_version"] = "agentic-workspace/command-package-ir/v1"
     manifest_path = tmp_path / "command_package_ir.json"
@@ -512,11 +612,14 @@ def test_loaded_legacy_schema_alias_renders_canonical_generation_metadata(tmp_pa
         source_path="command_package_ir.json",
         regenerate_command="python generate.py",
     )
-    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
-
-    assert json.loads(rendered["todo_cli_pkg/command_package.json"])["generation_metadata"]["source_ir"] == {
-        "schema_version": "command-generation/command-package-ir/v1"
+    rendered = {
+        output.path.relative_to(tmp_path).as_posix(): output.content
+        for output in outputs
     }
+
+    assert json.loads(rendered["todo_cli_pkg/command_package.json"])[
+        "generation_metadata"
+    ]["source_ir"] == {"schema_version": "command-generation/command-package-ir/v1"}
 
 
 def test_target_extension_schema_copies_match() -> None:
@@ -528,7 +631,9 @@ def test_target_extension_schema_copies_match() -> None:
 
 def test_public_api_exports_have_compatibility_classification() -> None:
     classification = command_generation_api.PUBLIC_API_CLASSIFICATION
-    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(encoding="utf-8")
+    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(
+        encoding="utf-8"
+    )
 
     assert set(classification) == set(command_generation_api.__all__)
     assert set(classification.values()) == {"stable"}
@@ -545,8 +650,12 @@ def test_public_api_exports_have_compatibility_classification() -> None:
 
 def test_stable_public_api_exports_are_audited_with_contracts() -> None:
     classification = command_generation_api.PUBLIC_API_CLASSIFICATION
-    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(encoding="utf-8")
-    audit = docs.split("## Stable API Audit", 1)[1].split("## Host Manifest And Primitive Support", 1)[0]
+    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(
+        encoding="utf-8"
+    )
+    audit = docs.split("## Stable API Audit", 1)[1].split(
+        "## Host Manifest And Primitive Support", 1
+    )[0]
 
     assert "Host-facing purpose" in audit
     assert "Stable contract" in audit
@@ -557,7 +666,9 @@ def test_stable_public_api_exports_are_audited_with_contracts() -> None:
 
 
 def test_public_api_audit_captures_post_separation_host_shape() -> None:
-    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(encoding="utf-8")
+    docs = (Path(__file__).resolve().parents[1] / "docs" / "public-api.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "`python_primitive_support_path`" in docs
     assert "`typescript_primitive_support_path`" in docs
@@ -610,12 +721,25 @@ def test_non_aw_fixture_renders_and_runs_python_command(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["item_count"] == 2
     assert payload["requested_format"] == "json"
-    assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(encoding="utf-8")
-    package_resource = json.loads((tmp_path / "todo_cli_pkg" / "command_package.json").read_text(encoding="utf-8"))
+    assert "agentic_workspace" not in (tmp_path / "todo_cli_pkg" / "cli.py").read_text(
+        encoding="utf-8"
+    )
+    package_resource = json.loads(
+        (tmp_path / "todo_cli_pkg" / "command_package.json").read_text(encoding="utf-8")
+    )
     metadata = package_resource["generation_metadata"]
-    assert metadata["schema_version"] == "command-generation/generated-artifact-metadata/v1"
-    assert metadata["generator"] == {"package": "command-generation", "version": package_version("command-generation")}
-    assert metadata["source_ir"]["schema_version"] == "command-generation/command-package-ir/v1"
+    assert (
+        metadata["schema_version"]
+        == "command-generation/generated-artifact-metadata/v1"
+    )
+    assert metadata["generator"] == {
+        "package": "command-generation",
+        "version": package_version("command-generation"),
+    }
+    assert (
+        metadata["source_ir"]["schema_version"]
+        == "command-generation/command-package-ir/v1"
+    )
     assert metadata["target"] == {
         "kind": "python",
         "package_name": "todo-fixture",
@@ -665,7 +789,9 @@ def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> Non
     assert stale == []
     sys.path.insert(0, str(tmp_path))
     try:
-        invoke = importlib.import_module("todo_cli_pkg.commands.todo_list_report").invoke
+        invoke = importlib.import_module(
+            "todo_cli_pkg.commands.todo_list_report"
+        ).invoke
 
         result = invoke({"format": "json", "output_format": "text"})
     finally:
@@ -681,7 +807,9 @@ def test_non_aw_fixture_renders_python_operation_callable(tmp_path: Path) -> Non
     }
 
 
-def test_non_aw_fixture_python_cli_covers_nested_required_positional_and_append(tmp_path: Path) -> None:
+def test_non_aw_fixture_python_cli_covers_nested_required_positional_and_append(
+    tmp_path: Path,
+) -> None:
     manifest = _fixture_manifest_with_nested_cli_shapes(tmp_path)
 
     stale = generate_command_packages(
@@ -717,7 +845,9 @@ def test_non_aw_fixture_python_cli_covers_nested_required_positional_and_append(
     assert payload["tags"] == ["docs", "tests"]
 
 
-def test_non_aw_fixture_python_cli_validates_required_nested_option(tmp_path: Path) -> None:
+def test_non_aw_fixture_python_cli_validates_required_nested_option(
+    tmp_path: Path,
+) -> None:
     generate_command_packages(
         _fixture_manifest_with_nested_cli_shapes(tmp_path),
         repo_root=tmp_path,
@@ -747,7 +877,9 @@ def test_non_aw_fixture_python_cli_validates_required_nested_option(tmp_path: Pa
     assert "--priority" in result.stderr
 
 
-def test_non_aw_fixture_python_host_owned_primitive_success_path(tmp_path: Path) -> None:
+def test_non_aw_fixture_python_host_owned_primitive_success_path(
+    tmp_path: Path,
+) -> None:
     registry = PrimitiveRegistry.from_definitions(
         [
             {
@@ -789,7 +921,9 @@ def test_non_aw_fixture_python_host_owned_primitive_success_path(tmp_path: Path)
     assert json.loads(result.stdout)["host_marker"] == "decorated-by-python-host"
 
 
-def test_non_aw_fixture_python_host_owned_primitive_requires_support_module(tmp_path: Path) -> None:
+def test_non_aw_fixture_python_host_owned_primitive_requires_support_module(
+    tmp_path: Path,
+) -> None:
     registry = PrimitiveRegistry.from_definitions(
         [
             {
@@ -827,12 +961,17 @@ def test_non_aw_fixture_python_host_owned_primitive_requires_support_module(tmp_
     assert "unsupported host primitive: 'todo.decorate'" in result.stderr
 
 
-def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path) -> None:
+def test_non_aw_fixture_accepts_host_primitive_registry_extension(
+    tmp_path: Path,
+) -> None:
     manifest = _fixture_manifest_with_typescript(tmp_path)
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
     command = cast(dict[str, object], cast(list[object], package["commands"])[0])
     runtime_binding = cast(dict[str, object], command["runtime_binding"])
-    runtime_binding["primitive_refs"] = [*cast(list[str], runtime_binding["primitive_refs"]), "todo.audit"]
+    runtime_binding["primitive_refs"] = [
+        *cast(list[str], runtime_binding["primitive_refs"]),
+        "todo.audit",
+    ]
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
     steps = cast(list[object], cast(dict[str, object], operation["ir_plan"])["steps"])
@@ -851,7 +990,10 @@ def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path
                 "id": "todo.audit",
                 "kind": "host-owned",
                 "description": "Fixture host-owned audit primitive.",
-                "target_support": {"python": "host-implemented", "typescript": "host-implemented"},
+                "target_support": {
+                    "python": "host-implemented",
+                    "typescript": "host-implemented",
+                },
                 "owner": "todo fixture",
             }
         ]
@@ -864,10 +1006,16 @@ def test_non_aw_fixture_accepts_host_primitive_registry_extension(tmp_path: Path
         regenerate_command="python generate.py",
         host_manifest=CommandGenerationHostManifest(primitive_registry=registry),
     )
-    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+    rendered = {
+        output.path.relative_to(tmp_path).as_posix(): output.content
+        for output in outputs
+    }
 
     assert "todo.audit" in rendered["todo_cli_pkg/operations/todo.list.report.json"]
-    assert "todo.audit" in rendered["todo_ts_pkg/resources/operations/todo.list.report.json"]
+    assert (
+        "todo.audit"
+        in rendered["todo_ts_pkg/resources/operations/todo.list.report.json"]
+    )
 
 
 def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:
@@ -875,7 +1023,9 @@ def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:
     cache_dir = tmp_path / "payload" / "__pycache__"
     cache_dir.mkdir()
     (cache_dir / "todos.cpython-313.pyc").write_bytes(b"\xb1\x00invalid bytecode")
-    (tmp_path / "payload" / "stale.pyo").write_bytes(b"\xb1\x00invalid optimized bytecode")
+    (tmp_path / "payload" / "stale.pyo").write_bytes(
+        b"\xb1\x00invalid optimized bytecode"
+    )
 
     stale = generate_command_packages(
         manifest,
@@ -891,7 +1041,9 @@ def test_resource_copies_skip_python_cache_artifacts(tmp_path: Path) -> None:
     assert not (tmp_path / "todo_cli_pkg" / "_payload" / "stale.pyo").exists()
 
 
-def test_canonical_command_artifacts_expose_implementation_independent_truth(tmp_path: Path) -> None:
+def test_canonical_command_artifacts_expose_implementation_independent_truth(
+    tmp_path: Path,
+) -> None:
     manifest = _fixture_manifest(tmp_path)
 
     artifacts = canonical_command_artifacts(manifest)
@@ -902,15 +1054,27 @@ def test_canonical_command_artifacts_expose_implementation_independent_truth(tmp
     assert artifact.program == "todoctl"
     assert artifact.adapter_id == "todo.list.cli"
     assert artifact.command_name == "list"
-    assert artifact.operation_ref == {"id": "todo.list.report", "path": "operations/todo.list.report.json"}
-    assert artifact.runtime_binding["primitive_refs"] == ["filesystem.read", "json.parse", "payload.assemble", "output.emit"]
+    assert artifact.operation_ref == {
+        "id": "todo.list.report",
+        "path": "operations/todo.list.report.json",
+    }
+    assert artifact.runtime_binding["primitive_refs"] == [
+        "filesystem.read",
+        "json.parse",
+        "payload.assemble",
+        "output.emit",
+    ]
     assert artifact.conformance_refs == ("todo.list.process",)
     assert artifact.projection_boundary["universal"] == ("command identity",)
     assert artifact.projection_boundary["target_specific"] == ("parser wiring",)
-    assert artifact.projection_boundary["runtime_owned"] == ("portable primitive execution",)
+    assert artifact.projection_boundary["runtime_owned"] == (
+        "portable primitive execution",
+    )
 
 
-def test_canonical_command_artifacts_exclude_target_specific_package_fields(tmp_path: Path) -> None:
+def test_canonical_command_artifacts_exclude_target_specific_package_fields(
+    tmp_path: Path,
+) -> None:
     artifact = canonical_command_artifacts(_fixture_manifest(tmp_path))[0]
 
     artifact_fields = set(artifact.__dataclass_fields__)
@@ -932,8 +1096,13 @@ def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) ->
         source_path="command_package_ir.json",
         regenerate_command="python generate.py",
     )
-    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
-    package_resource = json.loads(rendered["todo_ts_pkg/resources/command_package.json"])
+    rendered = {
+        output.path.relative_to(tmp_path).as_posix(): output.content
+        for output in outputs
+    }
+    package_resource = json.loads(
+        rendered["todo_ts_pkg/resources/command_package.json"]
+    )
     package_json = json.loads(rendered["todo_ts_pkg/package.json"])
 
     assert package_resource["target_resource_scope"] == {
@@ -954,7 +1123,10 @@ def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) ->
     metadata = package_resource["generation_metadata"]
     assert metadata == package_json["agenticWorkspace"]["generationMetadata"]
     assert metadata["generator"]["version"] == package_version("command-generation")
-    assert metadata["source_ir"]["schema_version"] == "command-generation/command-package-ir/v1"
+    assert (
+        metadata["source_ir"]["schema_version"]
+        == "command-generation/command-package-ir/v1"
+    )
     assert metadata["target"] == {
         "kind": "typescript",
         "package_name": "todo-fixture-typescript",
@@ -962,26 +1134,47 @@ def test_typescript_command_package_resource_is_target_scoped(tmp_path: Path) ->
     }
 
 
-def test_generated_target_layout_versions_are_declared_and_placed_in_metadata(tmp_path: Path) -> None:
+def test_generated_target_layout_versions_are_declared_and_placed_in_metadata(
+    tmp_path: Path,
+) -> None:
     outputs = render_outputs(
         _fixture_manifest_with_typescript(tmp_path),
         repo_root=tmp_path,
         source_path="command_package_ir.json",
         regenerate_command="python generate.py",
     )
-    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+    rendered = {
+        output.path.relative_to(tmp_path).as_posix(): output.content
+        for output in outputs
+    }
     python_resource = json.loads(rendered["todo_cli_pkg/command_package.json"])
-    typescript_resource = json.loads(rendered["todo_ts_pkg/resources/command_package.json"])
+    typescript_resource = json.loads(
+        rendered["todo_ts_pkg/resources/command_package.json"]
+    )
     typescript_package = json.loads(rendered["todo_ts_pkg/package.json"])
 
     assert PYTHON_TARGET_LAYOUT_VERSION == "command-generation/python-target-layout/v1"
-    assert TYPESCRIPT_TARGET_LAYOUT_VERSION == "command-generation/typescript-target-layout/v1"
-    assert python_resource["generation_metadata"]["target"]["layout_version"] == PYTHON_TARGET_LAYOUT_VERSION
-    assert typescript_resource["generation_metadata"]["target"]["layout_version"] == TYPESCRIPT_TARGET_LAYOUT_VERSION
-    assert typescript_package["agenticWorkspace"]["generationMetadata"] == typescript_resource["generation_metadata"]
+    assert (
+        TYPESCRIPT_TARGET_LAYOUT_VERSION
+        == "command-generation/typescript-target-layout/v1"
+    )
+    assert (
+        python_resource["generation_metadata"]["target"]["layout_version"]
+        == PYTHON_TARGET_LAYOUT_VERSION
+    )
+    assert (
+        typescript_resource["generation_metadata"]["target"]["layout_version"]
+        == TYPESCRIPT_TARGET_LAYOUT_VERSION
+    )
+    assert (
+        typescript_package["agenticWorkspace"]["generationMetadata"]
+        == typescript_resource["generation_metadata"]
+    )
 
 
-def test_non_aw_fixture_freshness_reports_python_and_typescript_targets(tmp_path: Path) -> None:
+def test_non_aw_fixture_freshness_reports_python_and_typescript_targets(
+    tmp_path: Path,
+) -> None:
     manifest = _fixture_manifest_with_typescript(tmp_path)
 
     generate_command_packages(
@@ -1012,7 +1205,9 @@ def test_non_aw_fixture_freshness_reports_python_and_typescript_targets(tmp_path
         required_target_families=("python", "typescript"),
         target_family_for_path=family,
     )
-    (tmp_path / "todo_ts_pkg" / "src" / "cli.mjs").write_text("// stale\n", encoding="utf-8")
+    (tmp_path / "todo_ts_pkg" / "src" / "cli.mjs").write_text(
+        "// stale\n", encoding="utf-8"
+    )
     stale = generated_output_freshness_report(
         outputs,
         repo_root=tmp_path,
@@ -1024,10 +1219,14 @@ def test_non_aw_fixture_freshness_reports_python_and_typescript_targets(tmp_path
     assert set(fresh["rendered_output_count_by_family"]) == {"python", "typescript"}
     assert fresh["missing_target_families"] == []
     assert stale["status"] == "stale-or-incomplete"
-    assert stale["stale_outputs_by_family"] == {"typescript": ["todo_ts_pkg/src/cli.mjs"]}
+    assert stale["stale_outputs_by_family"] == {
+        "typescript": ["todo_ts_pkg/src/cli.mjs"]
+    }
 
 
-def test_typescript_cli_append_option_accumulates_repeated_values(tmp_path: Path) -> None:
+def test_typescript_cli_append_option_accumulates_repeated_values(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")
     manifest = _fixture_manifest_with_typescript_append_option(tmp_path)
@@ -1077,7 +1276,13 @@ def test_typescript_cli_append_option_defaults_to_empty_list(tmp_path: Path) -> 
     )
 
     result = subprocess.run(
-        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "--format",
+            "json",
+        ],
         cwd=tmp_path,
         text=True,
         capture_output=True,
@@ -1131,7 +1336,15 @@ def test_typescript_cli_append_option_validates_choices(tmp_path: Path) -> None:
     )
 
     result = subprocess.run(
-        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--tag", "alpha", "--tag", "gamma"],
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "--tag",
+            "alpha",
+            "--tag",
+            "gamma",
+        ],
         cwd=tmp_path,
         text=True,
         capture_output=True,
@@ -1179,7 +1392,13 @@ def test_non_aw_fixture_typescript_payload_view_primitive(tmp_path: Path) -> Non
     )
 
     result = subprocess.run(
-        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "--format",
+            "json",
+        ],
         cwd=tmp_path,
         text=True,
         capture_output=True,
@@ -1193,7 +1412,9 @@ def test_non_aw_fixture_typescript_payload_view_primitive(tmp_path: Path) -> Non
     assert payload["values"]["items"] == [{"title": "Write test"}]
 
 
-def test_non_aw_fixture_typescript_select_by_value_preserves_falsy_keys(tmp_path: Path) -> None:
+def test_non_aw_fixture_typescript_select_by_value_preserves_falsy_keys(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")
 
@@ -1254,7 +1475,9 @@ def test_non_aw_fixture_typescript_select_by_value_preserves_falsy_keys(tmp_path
     assert json.loads(result.stdout) == {"selected": "false-key"}
 
 
-def test_non_aw_fixture_typescript_payload_view_rejects_invalid_limits(tmp_path: Path) -> None:
+def test_non_aw_fixture_typescript_payload_view_rejects_invalid_limits(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")
 
@@ -1288,7 +1511,13 @@ def test_non_aw_fixture_typescript_payload_view_rejects_invalid_limits(tmp_path:
     )
 
     result = subprocess.run(
-        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "--format",
+            "json",
+        ],
         cwd=tmp_path,
         text=True,
         capture_output=True,
@@ -1335,7 +1564,13 @@ def test_non_aw_fixture_typescript_transaction_plan_primitive(tmp_path: Path) ->
     )
 
     result = subprocess.run(
-        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "--format",
+            "json",
+        ],
         cwd=tmp_path,
         text=True,
         capture_output=True,
@@ -1345,12 +1580,16 @@ def test_non_aw_fixture_typescript_transaction_plan_primitive(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["dry_run"] is True
-    assert payload["actions"] == [{"action": "create", "kind": "file", "path": "notes/new.md"}]
+    assert payload["actions"] == [
+        {"action": "create", "kind": "file", "path": "notes/new.md"}
+    ]
     assert payload["mutation_safety"]["apply_status"] == "package-owned"
     assert payload["mutation_safety"]["apply_primitive"] == "fixture.transaction.apply"
 
 
-def test_non_aw_fixture_typescript_transaction_plan_rejects_invalid_resource_path(tmp_path: Path) -> None:
+def test_non_aw_fixture_typescript_transaction_plan_rejects_invalid_resource_path(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")
 
@@ -1380,7 +1619,13 @@ def test_non_aw_fixture_typescript_transaction_plan_rejects_invalid_resource_pat
     )
 
     result = subprocess.run(
-        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "--format", "json"],
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "--format",
+            "json",
+        ],
         cwd=tmp_path,
         text=True,
         capture_output=True,
@@ -1391,7 +1636,9 @@ def test_non_aw_fixture_typescript_transaction_plan_rejects_invalid_resource_pat
     assert "transaction.plan resource path must be relative" in result.stderr
 
 
-def test_non_aw_fixture_typescript_host_owned_primitive_success_path(tmp_path: Path) -> None:
+def test_non_aw_fixture_typescript_host_owned_primitive_success_path(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript host-owned primitive execution")
     registry = PrimitiveRegistry.from_definitions(
@@ -1441,7 +1688,9 @@ def test_non_aw_fixture_typescript_host_owned_primitive_success_path(tmp_path: P
     assert json.loads(result.stdout)["host_marker"] == "decorated-by-ts-host"
 
 
-def test_non_aw_fixture_typescript_host_owned_primitive_requires_target_support(tmp_path: Path) -> None:
+def test_non_aw_fixture_typescript_host_owned_primitive_requires_target_support(
+    tmp_path: Path,
+) -> None:
     registry = PrimitiveRegistry.from_definitions(
         [
             {
@@ -1449,13 +1698,17 @@ def test_non_aw_fixture_typescript_host_owned_primitive_requires_target_support(
                 "kind": "host-owned",
                 "description": "Fixture host-owned TypeScript result decorator.",
                 "target_support": {"typescript": "unsupported"},
-                "unsupported_targets": {"typescript": "fixture host primitive is intentionally missing"},
+                "unsupported_targets": {
+                    "typescript": "fixture host primitive is intentionally missing"
+                },
                 "owner": "todo fixture",
             }
         ]
     )
 
-    with pytest.raises(ValueError, match="fixture host primitive is intentionally missing"):
+    with pytest.raises(
+        ValueError, match="fixture host primitive is intentionally missing"
+    ):
         render_outputs(
             _fixture_manifest_with_host_owned_typescript_primitive(tmp_path),
             repo_root=tmp_path,
@@ -1465,7 +1718,9 @@ def test_non_aw_fixture_typescript_host_owned_primitive_requires_target_support(
         )
 
 
-def test_non_aw_fixture_typescript_cli_covers_nested_required_positional_and_append(tmp_path: Path) -> None:
+def test_non_aw_fixture_typescript_cli_covers_nested_required_positional_and_append(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")
 
@@ -1506,7 +1761,9 @@ def test_non_aw_fixture_typescript_cli_covers_nested_required_positional_and_app
     assert payload["tags"] == ["docs", "tests"]
 
 
-def test_typescript_generated_test_uses_valid_required_subcommand_sample_invocations(tmp_path: Path) -> None:
+def test_typescript_generated_test_uses_valid_required_subcommand_sample_invocations(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for generated TypeScript test execution")
 
@@ -1518,7 +1775,9 @@ def test_typescript_generated_test_uses_valid_required_subcommand_sample_invocat
         check=False,
     )
 
-    test_source = (tmp_path / "todo_ts_pkg" / "test" / "command-package.test.mjs").read_text(encoding="utf-8")
+    test_source = (
+        tmp_path / "todo_ts_pkg" / "test" / "command-package.test.mjs"
+    ).read_text(encoding="utf-8")
     result = subprocess.run(
         ["node", "--test", "test/command-package.test.mjs"],
         cwd=tmp_path / "todo_ts_pkg",
@@ -1527,14 +1786,24 @@ def test_typescript_generated_test_uses_valid_required_subcommand_sample_invocat
         check=False,
     )
 
-    assert '["list", "project", "alpha", "--priority", "high", "--format", "json"]' in test_source
-    assert '["list", "project", "__SPACED_TARGET__", "--priority", "high"]' in test_source
-    assert "generated runnable adapter rejects command without required subcommand" in test_source
+    assert (
+        '["list", "project", "alpha", "--priority", "high", "--format", "json"]'
+        in test_source
+    )
+    assert (
+        '["list", "project", "__SPACED_TARGET__", "--priority", "high"]' in test_source
+    )
+    assert (
+        "generated runnable adapter rejects command without required subcommand"
+        in test_source
+    )
     assert "missing subcommand for list" in test_source
     assert result.returncode == 0, result.stderr
 
 
-def test_typescript_generated_test_samples_required_store_true_and_integer_specs(tmp_path: Path) -> None:
+def test_typescript_generated_test_samples_required_store_true_and_integer_specs(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for generated TypeScript test execution")
 
@@ -1546,7 +1815,9 @@ def test_typescript_generated_test_samples_required_store_true_and_integer_specs
         check=False,
     )
 
-    test_source = (tmp_path / "todo_ts_pkg" / "test" / "command-package.test.mjs").read_text(encoding="utf-8")
+    test_source = (
+        tmp_path / "todo_ts_pkg" / "test" / "command-package.test.mjs"
+    ).read_text(encoding="utf-8")
     result = subprocess.run(
         ["node", "--test", "test/command-package.test.mjs"],
         cwd=tmp_path / "todo_ts_pkg",
@@ -1555,8 +1826,11 @@ def test_typescript_generated_test_samples_required_store_true_and_integer_specs
         check=False,
     )
 
-    assert '["count", "1", "--confirmed", "--limit", "1", "--format", "json"]' in test_source
-    assert "--confirmed\", \"value" not in test_source
+    assert (
+        '["count", "1", "--confirmed", "--limit", "1", "--format", "json"]'
+        in test_source
+    )
+    assert '--confirmed", "value' not in test_source
     assert result.returncode == 0, result.stderr
 
 
@@ -1596,7 +1870,9 @@ def test_typescript_cli_coerces_integer_positionals_and_options(tmp_path: Path) 
     assert payload["limit"] == 3
 
 
-def test_non_aw_fixture_typescript_cli_validates_required_nested_option(tmp_path: Path) -> None:
+def test_non_aw_fixture_typescript_cli_validates_required_nested_option(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript CLI execution")
 
@@ -1608,7 +1884,13 @@ def test_non_aw_fixture_typescript_cli_validates_required_nested_option(tmp_path
         check=False,
     )
     result = subprocess.run(
-        ["node", str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"), "list", "project", "alpha"],
+        [
+            "node",
+            str(tmp_path / "todo_ts_pkg" / "src" / "cli.mjs"),
+            "list",
+            "project",
+            "alpha",
+        ],
         cwd=tmp_path,
         text=True,
         capture_output=True,
@@ -1625,7 +1907,9 @@ def test_generated_targets_include_operation_fragment_support(tmp_path: Path) ->
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
     read_step = operation["ir_plan"]["steps"].pop(0)
     operation["ir_plan"]["fragments"] = [{"id": "load-todos", "steps": [read_step]}]
-    operation["ir_plan"]["steps"].insert(0, {"id": "load", "uses_fragment": "load-todos"})
+    operation["ir_plan"]["steps"].insert(
+        0, {"id": "load", "uses_fragment": "load-todos"}
+    )
     operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
 
     outputs = render_outputs(
@@ -1634,14 +1918,30 @@ def test_generated_targets_include_operation_fragment_support(tmp_path: Path) ->
         source_path="command_package_ir.json",
         regenerate_command="python generate.py",
     )
-    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+    rendered = {
+        output.path.relative_to(tmp_path).as_posix(): output.content
+        for output in outputs
+    }
 
-    assert json.loads(rendered["todo_cli_pkg/operations/todo.list.report.json"])["ir_plan"]["fragments"][0]["id"] == "load-todos"
-    assert "expand_operation_steps" in rendered["todo_cli_pkg/primitives/primitive_executor.py"]
-    assert "def expand_operation_steps" in rendered["todo_cli_pkg/primitives/operation_composition.py"]
+    assert (
+        json.loads(rendered["todo_cli_pkg/operations/todo.list.report.json"])[
+            "ir_plan"
+        ]["fragments"][0]["id"]
+        == "load-todos"
+    )
+    assert (
+        "expand_operation_steps"
+        in rendered["todo_cli_pkg/primitives/primitive_executor.py"]
+    )
+    assert (
+        "def expand_operation_steps"
+        in rendered["todo_cli_pkg/primitives/operation_composition.py"]
+    )
 
 
-def test_python_host_primitive_support_keeps_generated_executor_skeleton(tmp_path: Path) -> None:
+def test_python_host_primitive_support_keeps_generated_executor_skeleton(
+    tmp_path: Path,
+) -> None:
     manifest = _fixture_manifest(tmp_path)
     support_path = tmp_path / "contracts" / "python_host_primitive_support.py"
     support_path.write_text(
@@ -1662,12 +1962,21 @@ def test_python_host_primitive_support_keeps_generated_executor_skeleton(tmp_pat
             "generated_root": "generated",
         },
     )
-    rendered = {output.path.relative_to(tmp_path).as_posix(): output.content for output in outputs}
+    rendered = {
+        output.path.relative_to(tmp_path).as_posix(): output.content
+        for output in outputs
+    }
 
     primitive_executor = rendered["todo_cli_pkg/primitives/primitive_executor.py"]
     support = rendered["todo_cli_pkg/primitives/host_primitive_support.py"]
-    assert "Host primitive support: contracts/python_host_primitive_support.py" in primitive_executor
-    assert "Portable primitive dispatch and executor structure belong to command-generation." in primitive_executor
+    assert (
+        "Host primitive support: contracts/python_host_primitive_support.py"
+        in primitive_executor
+    )
+    assert (
+        "Portable primitive dispatch and executor structure belong to command-generation."
+        in primitive_executor
+    )
     assert "def execute_primitive(" in primitive_executor
     assert "execute_primitive = " not in primitive_executor
     assert "HOST_SENTINEL = 'host-owned-primitive-support'" in support
@@ -1675,8 +1984,12 @@ def test_python_host_primitive_support_keeps_generated_executor_skeleton(tmp_pat
 
 def test_typescript_host_primitive_support_keeps_generated_runtime_shell() -> None:
     root = Path(__file__).resolve().parents[1]
-    manifest_source = (root / "src" / "command_generation" / "host_manifest.py").read_text(encoding="utf-8")
-    renderer_source = (root / "src" / "command_generation" / "targets" / "typescript.py").read_text(encoding="utf-8")
+    manifest_source = (
+        root / "src" / "command_generation" / "host_manifest.py"
+    ).read_text(encoding="utf-8")
+    renderer_source = (
+        root / "src" / "command_generation" / "targets" / "typescript.py"
+    ).read_text(encoding="utf-8")
 
     assert "typescript_runtime_support_path" not in manifest_source
     assert "typescript_runtime_support_path" not in renderer_source
@@ -1684,7 +1997,9 @@ def test_typescript_host_primitive_support_keeps_generated_runtime_shell() -> No
     assert "function executePrimitive(" in renderer_source
 
 
-def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics() -> None:
+def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics() -> (
+    None
+):
     source_module = types.ModuleType("fake_source_runtime_for_facade")
 
     def first_value() -> str:
@@ -1730,8 +2045,13 @@ def test_generated_local_runtime_facade_documents_and_preserves_patch_semantics(
         assert cast(Callable[[], str], facade_globals["runtime_value"])() == "second"
 
         facade_globals["runtime_value"] = lambda: "facade-only"
-        assert cast(Callable[[], str], getattr(source_module, "runtime_value"))() == "second"
-        assert cast(Callable[[], str], facade_globals["runtime_value"])() == "facade-only"
+        assert (
+            cast(Callable[[], str], getattr(source_module, "runtime_value"))()
+            == "second"
+        )
+        assert (
+            cast(Callable[[], str], facade_globals["runtime_value"])() == "facade-only"
+        )
     finally:
         sys.modules.pop(source_module.__name__, None)
 
@@ -1771,12 +2091,19 @@ def test_generated_json_output_fallback_delegates_declared_text_views() -> None:
     assert "print(_emit_output(values=values, arguments=arguments), end='')" in rendered
 
 
-def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_path: Path) -> None:
+def test_generated_output_emit_text_views_execute_in_python_and_typescript(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript generated-runtime conformance")
     manifest = _fixture_manifest_with_typescript(tmp_path)
     package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
-    operation_executor = cast(dict[str, object], cast(dict[str, object], package["python_runtime_binding"])["operation_executor"])
+    operation_executor = cast(
+        dict[str, object],
+        cast(dict[str, object], package["python_runtime_binding"])[
+            "operation_executor"
+        ],
+    )
     cast(list[object], operation_executor["initial_values"]).extend(
         [
             {"name": "profile", "arg": "profile", "default": "compact"},
@@ -1842,18 +2169,45 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
                             "Items: {items|join:, |empty:(none)}",
                             "Missing: {missing|join:, |empty:(none)}",
                             "Warnings count: {warnings|len}",
-                            {"when": "warnings", "lines": ["Warnings:", {"for_each": {"path": "warnings", "template": "- {}"}}]},
-                            {"when": "metadata", "lines": ["Metadata:", {"json": "metadata"}]},
-                            {"when": "empty_object", "lines": ["Empty object should not render"]},
+                            {
+                                "when": "warnings",
+                                "lines": [
+                                    "Warnings:",
+                                    {
+                                        "for_each": {
+                                            "path": "warnings",
+                                            "template": "- {}",
+                                        }
+                                    },
+                                ],
+                            },
+                            {
+                                "when": "metadata",
+                                "lines": ["Metadata:", {"json": "metadata"}],
+                            },
+                            {
+                                "when": "empty_object",
+                                "lines": ["Empty object should not render"],
+                            },
                             {
                                 "for_each": {
                                     "path": "records",
-                                    "lines": ["Record: {name} ({status})", "Root profile: {root.profile}"],
+                                    "lines": [
+                                        "Record: {name} ({status})",
+                                        "Root profile: {root.profile}",
+                                    ],
                                 }
                             },
                         ],
                     },
-                    {"id": "fixture.default", "default": True, "lines": ["Default profile: {profile}", "Items: {items|join:, |empty:(none)}"]},
+                    {
+                        "id": "fixture.default",
+                        "default": True,
+                        "lines": [
+                            "Default profile: {profile}",
+                            "Items: {items|join:, |empty:(none)}",
+                        ],
+                    },
                 ]
             },
             "outputs": ["result"],
@@ -1875,7 +2229,9 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
     sys.path.insert(0, str(tmp_path))
     try:
         py_cli = importlib.import_module("todo_cli_pkg.cli")
-        py_executor = importlib.import_module("todo_cli_pkg.primitives.operation_executor")
+        py_executor = importlib.import_module(
+            "todo_cli_pkg.primitives.operation_executor"
+        )
         py_contract = py_cli.generated_operation_contract("todo.list.report")
         values = {
             "format": "text",
@@ -1884,7 +2240,13 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             "items": ["alpha", "beta"],
             "records": [{"name": "one", "status": "ready"}],
             "warnings": ["check config"],
-            "metadata": {"source": "fixture", "city": "Malm\u00f6", "10": "a", "2": "b", "nested": {"10": "inner-a", "2": "inner-b"}},
+            "metadata": {
+                "source": "fixture",
+                "city": "Malm\u00f6",
+                "10": "a",
+                "2": "b",
+                "nested": {"10": "inner-a", "2": "inner-b"},
+            },
             "empty_object": {},
             "missing": [],
             "active": True,
@@ -1908,7 +2270,14 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "process.stdout.write(JSON.stringify(result));\n",
         encoding="utf-8",
     )
-    ts_result = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
+    ts_result = subprocess.run(
+        ["node", str(runner)],
+        cwd=tmp_path,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
     assert ts_result.returncode == 0, ts_result.stderr
     ts_text = json.loads(ts_result.stdout)
 
@@ -1943,8 +2312,12 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
     sys.path.insert(0, str(tmp_path))
     try:
         py_cli = importlib.import_module("todo_cli_pkg.cli")
-        py_executor = importlib.import_module("todo_cli_pkg.primitives.operation_executor")
-        py_default = py_executor.run_operation_callable(py_cli.generated_operation_contract("todo.list.report"), default_values)
+        py_executor = importlib.import_module(
+            "todo_cli_pkg.primitives.operation_executor"
+        )
+        py_default = py_executor.run_operation_callable(
+            py_cli.generated_operation_contract("todo.list.report"), default_values
+        )
     finally:
         sys.path.remove(str(tmp_path))
         for name in list(sys.modules):
@@ -1957,27 +2330,55 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "process.stdout.write(JSON.stringify(result));\n",
         encoding="utf-8",
     )
-    ts_default = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
+    ts_default = subprocess.run(
+        ["node", str(runner)],
+        cwd=tmp_path,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
     assert ts_default.returncode == 0, ts_default.stderr
-    assert py_default == json.loads(ts_default.stdout) == "Default profile: expanded\nItems: (none)\n"
+    assert (
+        py_default
+        == json.loads(ts_default.stdout)
+        == "Default profile: expanded\nItems: (none)\n"
+    )
 
     def write_generated_emit_arguments(arguments: dict[str, object]) -> None:
         for generated_operation in (
             tmp_path / "todo_cli_pkg" / "operations" / "todo.list.report.json",
-            tmp_path / "todo_ts_pkg" / "resources" / "operations" / "todo.list.report.json",
+            tmp_path
+            / "todo_ts_pkg"
+            / "resources"
+            / "operations"
+            / "todo.list.report.json",
         ):
             malformed = json.loads(generated_operation.read_text(encoding="utf-8"))
-            cast(dict[str, object], cast(list[object], cast(dict[str, object], malformed["ir_plan"])["steps"])[1])["arguments"] = arguments
-            generated_operation.write_text(json.dumps(malformed, indent=2), encoding="utf-8")
+            cast(
+                dict[str, object],
+                cast(
+                    list[object], cast(dict[str, object], malformed["ir_plan"])["steps"]
+                )[1],
+            )["arguments"] = arguments
+            generated_operation.write_text(
+                json.dumps(malformed, indent=2), encoding="utf-8"
+            )
 
-    def assert_generated_text_view_error(arguments: dict[str, object], expected_message: str) -> None:
+    def assert_generated_text_view_error(
+        arguments: dict[str, object], expected_message: str
+    ) -> None:
         write_generated_emit_arguments(arguments)
         sys.path.insert(0, str(tmp_path))
         try:
             py_cli = importlib.import_module("todo_cli_pkg.cli")
-            py_executor = importlib.import_module("todo_cli_pkg.primitives.operation_executor")
+            py_executor = importlib.import_module(
+                "todo_cli_pkg.primitives.operation_executor"
+            )
             with pytest.raises(Exception, match=expected_message):
-                py_executor.run_operation_callable(py_cli.generated_operation_contract("todo.list.report"), values)
+                py_executor.run_operation_callable(
+                    py_cli.generated_operation_contract("todo.list.report"), values
+                )
         finally:
             sys.path.remove(str(tmp_path))
             for name in list(sys.modules):
@@ -1990,29 +2391,58 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
             "process.stdout.write(JSON.stringify(result));\n",
             encoding="utf-8",
         )
-        malformed_ts = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
+        malformed_ts = subprocess.run(
+            ["node", str(runner)],
+            cwd=tmp_path,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
         assert malformed_ts.returncode != 0
         assert expected_message in malformed_ts.stderr
 
-    assert_generated_text_view_error({"text_views": "not-a-list"}, "output.emit text_views must be a list")
     assert_generated_text_view_error(
-        {"text_views": [{"id": "bad.match", "match": {"items": ["alpha"]}, "lines": ["Bad"]}]},
+        {"text_views": "not-a-list"}, "output.emit text_views must be a list"
+    )
+    assert_generated_text_view_error(
+        {
+            "text_views": [
+                {"id": "bad.match", "match": {"items": ["alpha"]}, "lines": ["Bad"]}
+            ]
+        },
         "output.emit text view match values must be JSON scalars",
     )
     assert_generated_text_view_error(
         {
             "text_views": [
-                {"id": "bad.placeholder", "match": {"kind": "todo-list/v1"}, "lines": ["Metadata: {metadata}"]}
+                {
+                    "id": "bad.placeholder",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": ["Metadata: {metadata}"],
+                }
             ]
         },
         "output.emit text view placeholders require JSON scalars",
     )
     assert_generated_text_view_error(
-        {"text_views": [{"id": "bad.join", "match": {"kind": "todo-list/v1"}, "lines": ["Records: {records|join:, }"]}]},
+        {
+            "text_views": [
+                {
+                    "id": "bad.join",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": ["Records: {records|join:, }"],
+                }
+            ]
+        },
         "output.emit join filter requires a list of JSON scalars",
     )
     assert_generated_text_view_error(
-        {"text_views": [{"id": "bad.number", "match": {"score": 1e-7}, "lines": ["Bad"]}]},
+        {
+            "text_views": [
+                {"id": "bad.number", "match": {"score": 1e-7}, "lines": ["Bad"]}
+            ]
+        },
         "output.emit text view match values must be JSON scalars",
     )
     assert_generated_text_view_error(
@@ -2028,26 +2458,55 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         },
         "output.emit text view has unsupported fields",
     )
+
     assert_generated_text_view_error(
         {"text_views": [{"id": "bad.default-type", "default": [], "lines": ["Bad"]}]},
         "output.emit text view default must be a boolean",
     )
     assert_generated_text_view_error(
-        {"text_views": [{"id": "bad.literal-type", "match": {"kind": "todo-list/v1"}, "lines": [{"literal": {"a": 1}}]}]},
+        {
+            "text_views": [
+                {
+                    "id": "bad.literal-type",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [{"literal": {"a": 1}}],
+                }
+            ]
+        },
         "output.emit literal line value must be a string",
     )
     assert_generated_text_view_error(
-        {"text_views": [{"id": "bad.template-type", "match": {"kind": "todo-list/v1"}, "lines": [{"template": 42}]}]},
+        {
+            "text_views": [
+                {
+                    "id": "bad.template-type",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [{"template": 42}],
+                }
+            ]
+        },
         "output.emit template line value must be a string",
     )
     assert_generated_text_view_error(
-        {"text_views": [{"id": "bad.json-path-type", "match": {"kind": "todo-list/v1"}, "lines": [{"json": ["metadata"]}]}]},
+        {
+            "text_views": [
+                {
+                    "id": "bad.json-path-type",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [{"json": ["metadata"]}],
+                }
+            ]
+        },
         "output.emit json line path must be a string",
     )
     assert_generated_text_view_error(
         {
             "text_views": [
-                {"id": "bad.when-path-type", "match": {"kind": "todo-list/v1"}, "lines": [{"when": ["warnings"], "lines": ["Bad"]}]}
+                {
+                    "id": "bad.when-path-type",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [{"when": ["warnings"], "lines": ["Bad"]}],
+                }
             ]
         },
         "output.emit when line path must be a string",
@@ -2055,7 +2514,11 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
     assert_generated_text_view_error(
         {
             "text_views": [
-                {"id": "bad.for-each-path-type", "match": {"kind": "todo-list/v1"}, "lines": [{"for_each": {"path": ["warnings"], "template": "- {}"}}]}
+                {
+                    "id": "bad.for-each-path-type",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [{"for_each": {"path": ["warnings"], "template": "- {}"}}],
+                }
             ]
         },
         "output.emit for_each path must be a string",
@@ -2063,7 +2526,13 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
     assert_generated_text_view_error(
         {
             "text_views": [
-                {"id": "bad.for-each-template-type", "match": {"kind": "todo-list/v1"}, "lines": [{"for_each": {"path": "warnings", "template": {"line": "- {}"}}}]}
+                {
+                    "id": "bad.for-each-template-type",
+                    "match": {"kind": "todo-list/v1"},
+                    "lines": [
+                        {"for_each": {"path": "warnings", "template": {"line": "- {}"}}}
+                    ],
+                }
             ]
         },
         "output.emit for_each template must be a string",
@@ -2120,8 +2589,13 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
     sys.path.insert(0, str(tmp_path))
     try:
         py_cli = importlib.import_module("todo_cli_pkg.cli")
-        py_executor = importlib.import_module("todo_cli_pkg.primitives.operation_executor")
-        with pytest.raises(Exception, match="output.emit text view JSON numbers must be finite safe integers"):
+        py_executor = importlib.import_module(
+            "todo_cli_pkg.primitives.operation_executor"
+        )
+        with pytest.raises(
+            Exception,
+            match="output.emit text view JSON numbers must be finite safe integers",
+        ):
             py_executor.run_operation_callable(
                 py_cli.generated_operation_contract("todo.list.report"),
                 bad_json_number_values,
@@ -2138,12 +2612,279 @@ def test_generated_output_emit_text_views_execute_in_python_and_typescript(tmp_p
         "process.stdout.write(JSON.stringify(result));\n",
         encoding="utf-8",
     )
-    bad_json_number_ts = subprocess.run(["node", str(runner)], cwd=tmp_path, text=True, encoding="utf-8", capture_output=True, check=False)
+    bad_json_number_ts = subprocess.run(
+        ["node", str(runner)],
+        cwd=tmp_path,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
     assert bad_json_number_ts.returncode != 0
-    assert "output.emit text view JSON numbers must be finite safe integers" in bad_json_number_ts.stderr
+    assert (
+        "output.emit text view JSON numbers must be finite safe integers"
+        in bad_json_number_ts.stderr
+    )
 
 
-def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and_help() -> None:
+def test_generated_payload_project_contract_matches_interpreter_in_python_and_typescript(
+    tmp_path: Path,
+) -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is required for TypeScript generated-runtime conformance")
+    manifest = _fixture_manifest_with_typescript(tmp_path)
+    package = cast(dict[str, object], cast(list[object], manifest["packages"])[0])
+    command = cast(dict[str, object], cast(list[object], package["commands"])[0])
+    runtime_binding = cast(dict[str, object], command["runtime_binding"])
+    runtime_binding["primitive_refs"] = [
+        *cast(list[str], runtime_binding["primitive_refs"]),
+        "payload.project",
+    ]
+    operation_executor = cast(
+        dict[str, object],
+        cast(dict[str, object], package["python_runtime_binding"])[
+            "operation_executor"
+        ],
+    )
+    cast(list[object], operation_executor["initial_values"]).append(
+        {"name": "select", "arg": "select", "default": None}
+    )
+    near_budget_key = "n" * 94
+    bmp_boundary_key = "\ue000"
+    non_bmp_boundary_key = "\U00010000"
+    payload = {
+        **{
+            str(index): (
+                {bmp_boundary_key: "bmp", non_bmp_boundary_key: "non-bmp"}
+                if index == 3
+                else {near_budget_key: index}
+            )
+            for index in range(4, -1, -1)
+        },
+        "kind": "fixture/payload/v1",
+        "summary": {"count": 2},
+        "items": [{"name": "alpha"}, {"name": "beta"}],
+        "wide": {f"field{i}": i for i in range(80)},
+    }
+    source_command = "s" * 128
+    inventory_command = "i" * 128
+    detail_command = "d" * 128
+    project_arguments = {
+        "source": "result",
+        "source_command": source_command,
+        "selected_output_kind": "fixture/custom/selected-output/v1",
+        "selector_inventory_command": inventory_command,
+        "selector_detail_command": detail_command,
+    }
+    operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    cast(dict[str, object], operation["ir_plan"])["steps"] = [
+        {
+            "id": "assemble",
+            "uses": "payload.assemble",
+            "arguments": {"fields": {"template": payload}},
+            "outputs": ["result"],
+        },
+        {
+            "id": "project",
+            "uses": "payload.project",
+            "arguments": project_arguments,
+            "outputs": ["result"],
+        },
+    ]
+    operation_path.write_text(json.dumps(operation, indent=2), encoding="utf-8")
+
+    assert (
+        generate_command_packages(
+            manifest,
+            repo_root=tmp_path,
+            source_path="command_package_ir.json",
+            regenerate_command="python generate.py",
+            check=False,
+        )
+        == []
+    )
+
+    def interpreter_result(select: str) -> dict[str, object]:
+        return execute_primitive(
+            "payload.project",
+            values={
+                "operation_id": "todo.list.report",
+                "select": select,
+                "result": payload,
+            },
+            arguments=project_arguments,
+            context=PrimitiveContext(cwd=tmp_path),
+        )
+
+    def python_result(select: str) -> object:
+        sys.path.insert(0, str(tmp_path))
+        try:
+            py_cli = importlib.import_module("todo_cli_pkg.cli")
+            py_executor = importlib.import_module(
+                "todo_cli_pkg.primitives.operation_executor"
+            )
+            return py_executor.run_operation_callable(
+                py_cli.generated_operation_contract("todo.list.report"),
+                {"select": select},
+            )
+        finally:
+            sys.path.remove(str(tmp_path))
+            for name in list(sys.modules):
+                if name == "todo_cli_pkg" or name.startswith("todo_cli_pkg."):
+                    sys.modules.pop(name, None)
+
+    runner = tmp_path / "invoke-payload-project.mjs"
+
+    def typescript_result(select: str) -> object:
+        runner.write_text(
+            "import { invokeGeneratedOperation } from './todo_ts_pkg/src/runtime.mjs';\n"
+            f"const values = {{ select: {json.dumps(select)} }};\n"
+            "const result = invokeGeneratedOperation({ operationId: 'todo.list.report', operationPath: 'operations/todo.list.report.json', values });\n"
+            "process.stdout.write(JSON.stringify(result));\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["node", str(runner)],
+            cwd=tmp_path,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout)
+
+    def compact_json_utf8_size(value: object) -> int:
+        return len(
+            json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        )
+
+    selectors = ["summary.count", "items.0.name", *[f"missing{i}" for i in range(30)]]
+    invalid_selector_result = interpreter_result(",".join(selectors))
+    assert (
+        python_result(",".join(selectors))
+        == typescript_result(",".join(selectors))
+        == invalid_selector_result
+    )
+    assert (
+        invalid_selector_result["kind"] == "fixture/custom/selector-validation-error/v1"
+    )
+    assert invalid_selector_result["status"] == "invalid-selector"
+    assert invalid_selector_result["requested_selectors"] == selectors
+    assert invalid_selector_result["unknown_selectors"] == selectors[2:]
+    assert set(cast(dict[str, object], invalid_selector_result["suggestions"])) == set(
+        selectors[2:]
+    )
+    assert all(
+        len(suggestions) <= 1
+        for suggestions in cast(
+            dict[str, list[str]], invalid_selector_result["suggestions"]
+        ).values()
+    )
+    inventory = cast(dict[str, object], invalid_selector_result["selector_inventory"])
+    assert invalid_selector_result["source_command"] == source_command
+    assert inventory["discovery_command"] == inventory_command
+    assert inventory["inventory_command"] == detail_command
+    assert len(cast(list[str], inventory["sample"])) <= cast(
+        int, inventory["sample_limit"]
+    )
+    assert inventory["sample"] == [
+        "0",
+        f"0.{near_budget_key}",
+        "1",
+        f"1.{near_budget_key}",
+        "2",
+        f"2.{near_budget_key}",
+        "3",
+        f"3.{bmp_boundary_key}",
+    ]
+    assert "values" not in invalid_selector_result
+    assert compact_json_utf8_size(invalid_selector_result) < 6000
+
+    worst_selectors = [f"{'m' * 14}{index:02d}" for index in range(32)]
+    worst_result = interpreter_result(",".join(worst_selectors))
+    assert (
+        python_result(",".join(worst_selectors))
+        == typescript_result(",".join(worst_selectors))
+        == worst_result
+    )
+    assert worst_result["status"] == "invalid-selector"
+    assert worst_result["requested_selectors"] == worst_selectors
+    assert worst_result["unknown_selectors"] == worst_selectors
+    assert compact_json_utf8_size(worst_result) < 6000
+
+    too_many_selectors = ",".join(f"wide.field{i}" for i in range(33))
+    too_many_result = interpreter_result(too_many_selectors)
+    assert (
+        python_result(too_many_selectors)
+        == typescript_result(too_many_selectors)
+        == too_many_result
+    )
+    assert too_many_result["status"] == "invalid-selector-request"
+    assert len(cast(list[str], too_many_result["requested_selectors"])) == 32
+    assert (
+        cast(dict[str, object], too_many_result["selector_request"])["reason"]
+        == "too-many-selectors"
+    )
+    assert "values" not in too_many_result
+
+    too_large_selectors = ",".join(
+        [f"{'s' * 14}{index:02d}" for index in range(31)] + [f"{'s' * 15}31"]
+    )
+    too_large_result = interpreter_result(too_large_selectors)
+    assert (
+        python_result(too_large_selectors)
+        == typescript_result(too_large_selectors)
+        == too_large_result
+    )
+    assert too_large_result["status"] == "invalid-selector-request"
+    too_large_request = cast(dict[str, object], too_large_result["selector_request"])
+    assert too_large_request["reason"] == "selector-request-too-large"
+    assert too_large_request["selector_request_bytes"] == 513
+    assert compact_json_utf8_size(too_large_result) < 6000
+
+    overlong_result = interpreter_result("x" * 257)
+    assert python_result("x" * 257) == typescript_result("x" * 257) == overlong_result
+    assert overlong_result["status"] == "invalid-selector-request"
+    assert overlong_result["requested_selectors"] == []
+    assert (
+        cast(dict[str, object], overlong_result["selector_request"])["reason"]
+        == "selector-too-long"
+    )
+    assert compact_json_utf8_size(overlong_result) < 6000
+
+    astral = "\U0001f600"
+    accepted_astral = astral * 64
+    accepted_astral_result = interpreter_result(accepted_astral)
+    assert (
+        python_result(accepted_astral)
+        == typescript_result(accepted_astral)
+        == accepted_astral_result
+    )
+    assert accepted_astral_result["status"] == "invalid-selector"
+    assert accepted_astral_result["requested_selectors"] == [accepted_astral]
+    assert compact_json_utf8_size(accepted_astral_result) < 6000
+
+    rejected_astral = astral * 65
+    rejected_astral_result = interpreter_result(rejected_astral)
+    assert (
+        python_result(rejected_astral)
+        == typescript_result(rejected_astral)
+        == rejected_astral_result
+    )
+    assert rejected_astral_result["status"] == "invalid-selector-request"
+    rejected_astral_request = cast(
+        dict[str, object], rejected_astral_result["selector_request"]
+    )
+    assert rejected_astral_request["reason"] == "selector-too-long"
+    assert rejected_astral_request["selector_bytes"] == 260
+    assert compact_json_utf8_size(rejected_astral_result) < 6000
+
+
+def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and_help() -> (
+    None
+):
     runtime_module = types.ModuleType("fake_module_front_door_runtime")
     calls: list[list[str]] = []
 
@@ -2186,14 +2927,25 @@ def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and
                         "help_payload_function": "help_payload",
                         "help_text_function": "print_help",
                         "missing_module_message": "demo module is required",
-                        "stdout_replacements": [{"old": "demo-module ", "new": "demo-cli demo "}],
+                        "stdout_replacements": [
+                            {"old": "demo-module ", "new": "demo-cli demo "}
+                        ],
                         "positionals": [{"commands": ["route"], "attr": "route_id"}],
                         "option_specs": [
                             {"option": "--target", "attr": "target"},
                             {"option": "--verbose", "attr": "verbose", "kind": "flag"},
                             {"option": "--tag", "attr": "tags", "kind": "repeated"},
-                            {"option": "--group", "attr": "groups", "kind": "repeated_group"},
-                            {"option": "--path", "attr": "paths", "fallback_attr": "path", "kind": "repeated"},
+                            {
+                                "option": "--group",
+                                "attr": "groups",
+                                "kind": "repeated_group",
+                            },
+                            {
+                                "option": "--path",
+                                "attr": "paths",
+                                "fallback_attr": "path",
+                                "kind": "repeated",
+                            },
                         ],
                     }
                 ]
@@ -2210,15 +2962,29 @@ def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and
         generated_package = types.ModuleType("generated_demo")
         setattr(generated_package, "build_generated_parser", lambda: Parser())
         setattr(generated_package, "generated_command_names", lambda: ["demo"])
-        setattr(generated_package, "generated_operation_contract", lambda operation_id: {"id": operation_id})
-        setattr(generated_package, "run_generated_command", lambda argv, handler: handler("demo.front-door", argv))
+        setattr(
+            generated_package,
+            "generated_operation_contract",
+            lambda operation_id: {"id": operation_id},
+        )
+        setattr(
+            generated_package,
+            "run_generated_command",
+            lambda argv, handler: handler("demo.front-door", argv),
+        )
         setattr(generated_package, "supports_generated_command", lambda command: True)
         primitives_package = types.ModuleType("generated_demo.primitives")
-        operation_executor_module = types.ModuleType("generated_demo.primitives.operation_executor")
-        setattr(operation_executor_module, "run_operation_ir", lambda operation, args: 0)
+        operation_executor_module = types.ModuleType(
+            "generated_demo.primitives.operation_executor"
+        )
+        setattr(
+            operation_executor_module, "run_operation_ir", lambda operation, args: 0
+        )
         sys.modules["generated_demo"] = generated_package
         sys.modules["generated_demo.primitives"] = primitives_package
-        sys.modules["generated_demo.primitives.operation_executor"] = operation_executor_module
+        sys.modules["generated_demo.primitives.operation_executor"] = (
+            operation_executor_module
+        )
         module_globals: dict[str, object] = {
             "__name__": "generated_demo.runtime",
             "__package__": "generated_demo",
@@ -2227,7 +2993,12 @@ def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and
         exec(rendered, module_globals)
 
         args = types.SimpleNamespace(demo_command=None, target="repo", format="text")
-        assert cast(Callable[[str, object], int], module_globals["_run_generated_operation"])("demo.front-door", args) == 0
+        assert (
+            cast(
+                Callable[[str, object], int], module_globals["_run_generated_operation"]
+            )("demo.front-door", args)
+            == 0
+        )
 
         args = types.SimpleNamespace(
             demo_command="route",
@@ -2240,7 +3011,12 @@ def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and
             paths=[],
             path="fallback.txt",
         )
-        assert cast(Callable[[str, object], int], module_globals["_run_generated_operation"])("demo.front-door", args) == 7
+        assert (
+            cast(
+                Callable[[str, object], int], module_globals["_run_generated_operation"]
+            )("demo.front-door", args)
+            == 7
+        )
         assert calls == [
             [
                 "route",
@@ -2363,7 +3139,10 @@ def test_generated_argparse_function_call_handler_maps_args_and_emits_payload() 
                         "function": "payload_function",
                         "support_import_module": runtime_module.__name__,
                         "result": "emit_payload",
-                        "emit_payload": {"import_module": runtime_module.__name__, "function": "_emit_payload"},
+                        "emit_payload": {
+                            "import_module": runtime_module.__name__,
+                            "function": "_emit_payload",
+                        },
                         "arguments": [
                             {
                                 "name": "target_root",
@@ -2371,10 +3150,18 @@ def test_generated_argparse_function_call_handler_maps_args_and_emits_payload() 
                                 "attr": "target",
                                 "validate_command": "demo",
                             },
-                            {"name": "changed_paths", "kind": "list_attr", "attr": "changed"},
+                            {
+                                "name": "changed_paths",
+                                "kind": "list_attr",
+                                "attr": "changed",
+                            },
                             {"name": "dry_run", "kind": "bool_attr", "attr": "dry_run"},
                             {"name": "task_text", "kind": "attr", "attr": "task"},
-                            {"name": "profile", "kind": "diagnostic_profile", "default": "tiny"},
+                            {
+                                "name": "profile",
+                                "kind": "diagnostic_profile",
+                                "default": "tiny",
+                            },
                         ],
                     }
                 ]
@@ -2386,15 +3173,29 @@ def test_generated_argparse_function_call_handler_maps_args_and_emits_payload() 
         generated_package = types.ModuleType("generated_argparse_demo")
         setattr(generated_package, "build_generated_parser", lambda: object())
         setattr(generated_package, "generated_command_names", lambda: ["demo"])
-        setattr(generated_package, "generated_operation_contract", lambda operation_id: {"id": operation_id})
-        setattr(generated_package, "run_generated_command", lambda argv, handler: handler("demo.report", argv))
+        setattr(
+            generated_package,
+            "generated_operation_contract",
+            lambda operation_id: {"id": operation_id},
+        )
+        setattr(
+            generated_package,
+            "run_generated_command",
+            lambda argv, handler: handler("demo.report", argv),
+        )
         setattr(generated_package, "supports_generated_command", lambda command: True)
         primitives_package = types.ModuleType("generated_argparse_demo.primitives")
-        operation_executor_module = types.ModuleType("generated_argparse_demo.primitives.operation_executor")
-        setattr(operation_executor_module, "run_operation_ir", lambda operation, args: 0)
+        operation_executor_module = types.ModuleType(
+            "generated_argparse_demo.primitives.operation_executor"
+        )
+        setattr(
+            operation_executor_module, "run_operation_ir", lambda operation, args: 0
+        )
         sys.modules["generated_argparse_demo"] = generated_package
         sys.modules["generated_argparse_demo.primitives"] = primitives_package
-        sys.modules["generated_argparse_demo.primitives.operation_executor"] = operation_executor_module
+        sys.modules["generated_argparse_demo.primitives.operation_executor"] = (
+            operation_executor_module
+        )
         module_globals: dict[str, object] = {
             "__name__": "generated_argparse_demo.runtime",
             "__package__": "generated_argparse_demo",
@@ -2410,7 +3211,12 @@ def test_generated_argparse_function_call_handler_maps_args_and_emits_payload() 
             format="json",
         )
 
-        assert cast(Callable[[str, object], int], module_globals["_run_generated_operation"])("demo.report", args) == 0
+        assert (
+            cast(
+                Callable[[str, object], int], module_globals["_run_generated_operation"]
+            )("demo.report", args)
+            == 0
+        )
         assert calls == [
             {"validate": "demo", "target_root": "repo"},
             {
@@ -2454,7 +3260,9 @@ def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> N
 
     result, failures = run_cli_conformance_case(
         case=case,
-        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        target=CliConformanceTarget(
+            label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root
+        ),
         fixture_root=fixture_root,
     )
 
@@ -2467,13 +3275,18 @@ def test_contract_owned_conformance_case_runs_black_box_cli(tmp_path: Path) -> N
 def test_contract_owned_conformance_case_reports_output_drift(tmp_path: Path) -> None:
     contract = load_contract_conformance_case("todo.list.process")
     cli = tmp_path / "todo_cli.py"
-    cli.write_text("import json\nprint(json.dumps({'kind': 'todo-list/v1', 'item_count': 3}))\n", encoding="utf-8")
+    cli.write_text(
+        "import json\nprint(json.dumps({'kind': 'todo-list/v1', 'item_count': 3}))\n",
+        encoding="utf-8",
+    )
     case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
     fixture_root = materialize_case_fixture(case=case, root=tmp_path / "fixtures")
 
     _result, failures = run_cli_conformance_case(
         case=case,
-        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        target=CliConformanceTarget(
+            label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root
+        ),
         fixture_root=fixture_root,
     )
 
@@ -2485,13 +3298,17 @@ def test_contract_owned_conformance_case_reports_output_drift(tmp_path: Path) ->
 def test_contract_owned_conformance_case_checks_text_stdout(tmp_path: Path) -> None:
     contract = load_contract_conformance_case("todo.list-text.process")
     cli = tmp_path / "todo_cli.py"
-    cli.write_text("print('Todo items:\\n- Write contract-owned test')\n", encoding="utf-8")
+    cli.write_text(
+        "print('Todo items:\\n- Write contract-owned test')\n", encoding="utf-8"
+    )
     case = process_case_from_contract(contract=contract, command_placeholder="todo_cli")
     fixture_root = materialize_case_fixture(case=case, root=tmp_path / "fixtures")
 
     result, failures = run_cli_conformance_case(
         case=case,
-        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        target=CliConformanceTarget(
+            label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root
+        ),
         fixture_root=fixture_root,
     )
 
@@ -2500,7 +3317,9 @@ def test_contract_owned_conformance_case_checks_text_stdout(tmp_path: Path) -> N
     assert result.stdout == "Todo items:\n- Write contract-owned test\n"
 
 
-def test_contract_owned_conformance_case_reports_text_stdout_drift(tmp_path: Path) -> None:
+def test_contract_owned_conformance_case_reports_text_stdout_drift(
+    tmp_path: Path,
+) -> None:
     contract = load_contract_conformance_case("todo.list-text.process")
     cli = tmp_path / "todo_cli.py"
     cli.write_text("print('Todo items:\\n- Different item')\n", encoding="utf-8")
@@ -2509,7 +3328,9 @@ def test_contract_owned_conformance_case_reports_text_stdout_drift(tmp_path: Pat
 
     _result, failures = run_cli_conformance_case(
         case=case,
-        target=CliConformanceTarget(label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root),
+        target=CliConformanceTarget(
+            label="python-fixture", command=(sys.executable, str(cli)), cwd=fixture_root
+        ),
         fixture_root=fixture_root,
     )
 
@@ -2527,7 +3348,11 @@ def test_contract_owned_operation_case_runs_function_adapter() -> None:
         case=case,
         target=FunctionConformanceTarget(
             label="python-function",
-            invoke=lambda values: {"kind": "todo-list/v1", "item_count": 2, "format": values["format"]},
+            invoke=lambda values: {
+                "kind": "todo-list/v1",
+                "item_count": 2,
+                "format": values["format"],
+            },
         ),
     )
 
@@ -2536,7 +3361,9 @@ def test_contract_owned_operation_case_runs_function_adapter() -> None:
     assert result.selected_fields == {"kind": "todo-list/v1", "item_count": 2}
 
 
-def test_contract_owned_operation_case_runs_typescript_function_adapter(tmp_path: Path) -> None:
+def test_contract_owned_operation_case_runs_typescript_function_adapter(
+    tmp_path: Path,
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for TypeScript function conformance")
     manifest = _fixture_manifest_with_typescript(tmp_path)
@@ -2593,7 +3420,9 @@ def test_contract_owned_operation_case_checks_expected_function_error() -> None:
         case=case,
         target=FunctionConformanceTarget(
             label="python-function",
-            invoke=lambda _values: (_ for _ in ()).throw(ValueError("invalid format: yaml")),
+            invoke=lambda _values: (_ for _ in ()).throw(
+                ValueError("invalid format: yaml")
+            ),
         ),
     )
 
@@ -2602,7 +3431,9 @@ def test_contract_owned_operation_case_checks_expected_function_error() -> None:
     assert "invalid format" in result.error
 
 
-def test_conformance_ownership_inventory_accounts_for_shared_and_consumer_surfaces() -> None:
+def test_conformance_ownership_inventory_accounts_for_shared_and_consumer_surfaces() -> (
+    None
+):
     inventory = conformance_ownership_inventory()
 
     owns = cast(list[Mapping[str, object]], inventory["owns"])
@@ -2615,9 +3446,15 @@ def test_conformance_ownership_inventory_accounts_for_shared_and_consumer_surfac
         "bundled-conformance-case-resources",
     } <= owned
     assert "FunctionConformanceTarget" in cast(list[str], inventory["extension_points"])
-    assert "TypescriptFunctionConformanceTarget" in cast(list[str], inventory["extension_points"])
-    assert "consumer proof routing and installed-package lifecycle tests" in cast(list[str], inventory["consumer_owned"])
-    assert "consumer-specific behavior remains in the consumer repo" in str(inventory["completion_rule"])
+    assert "TypescriptFunctionConformanceTarget" in cast(
+        list[str], inventory["extension_points"]
+    )
+    assert "consumer proof routing and installed-package lifecycle tests" in cast(
+        list[str], inventory["consumer_owned"]
+    )
+    assert "consumer-specific behavior remains in the consumer repo" in str(
+        inventory["completion_rule"]
+    )
 
 
 def test_contract_conformance_cases_manifest_loads_package_owned_cases() -> None:
@@ -2627,10 +3464,15 @@ def test_contract_conformance_cases_manifest_loads_package_owned_cases() -> None
 
     assert manifest["schema_version"] == "command-generation/conformance-cases/v1"
     assert cases["todo.list.process"]["category"] == "convert"
-    assert load_contract_conformance_case("todo.list.operation")["operation_id"] == "todo.list.report"
+    assert (
+        load_contract_conformance_case("todo.list.operation")["operation_id"]
+        == "todo.list.report"
+    )
 
 
-def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family(tmp_path: Path) -> None:
+def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_target_family(
+    tmp_path: Path,
+) -> None:
     py_path = tmp_path / "out" / "python" / "cli.py"
     ts_path = tmp_path / "out" / "typescript" / "cli.mjs"
     py_path.parent.mkdir(parents=True)
@@ -2651,14 +3493,21 @@ def test_generated_output_freshness_report_counts_hashes_and_staleness_by_host_t
     assert report["status"] == "stale-or-incomplete"
     assert report["rendered_output_count_by_family"] == {"python": 1, "typescript": 1}
     assert report["stale_output_count_by_family"] == {"typescript": 1}
-    assert report["stale_outputs_by_family"] == {"typescript": ["out/typescript/cli.mjs"]}
+    assert report["stale_outputs_by_family"] == {
+        "typescript": ["out/typescript/cli.mjs"]
+    }
     assert report["missing_target_families"] == []
     assert set(report["expected_digest_by_family"]) == {"python", "typescript"}
     assert "do not rewrite generated files" in report["cheap_check_rule"]
 
 
 def test_generic_generator_source_has_no_aw_product_literals() -> None:
-    source = (Path(__file__).resolve().parents[1] / "src" / "command_generation" / "generator.py").read_text(encoding="utf-8")
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "command_generation"
+        / "generator.py"
+    ).read_text(encoding="utf-8")
 
     forbidden = [
         "agentic-workspace",
@@ -2675,9 +3524,12 @@ def test_generic_generator_source_has_no_aw_product_literals() -> None:
 
 
 def test_generator_delegates_to_internal_target_renderers() -> None:
-    generator_source = (Path(__file__).resolve().parents[1] / "src" / "command_generation" / "generator.py").read_text(
-        encoding="utf-8"
-    )
+    generator_source = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "command_generation"
+        / "generator.py"
+    ).read_text(encoding="utf-8")
     python_target = importlib.import_module("command_generation.targets.python")
     typescript_target = importlib.import_module("command_generation.targets.typescript")
 
@@ -2693,7 +3545,10 @@ def test_payload_assemble_builds_declarative_package_file_list(tmp_path: Path) -
     result = execute_primitive(
         "payload.assemble",
         values={
-            "files": [{"relative_path": "required.md"}, {"relative_path": "optional.md"}],
+            "files": [
+                {"relative_path": "required.md"},
+                {"relative_path": "optional.md"},
+            ],
             "skill_files": [{"relative_path": "fixture-skill/SKILL.md"}],
         },
         arguments={
@@ -2730,9 +3585,12 @@ def test_output_emit_renders_file_lists_as_text_lines(tmp_path: Path) -> None:
 
 
 def test_generic_primitive_executor_has_no_aw_path_literals() -> None:
-    source = (Path(__file__).resolve().parents[1] / "src" / "command_generation" / "primitive_executor.py").read_text(
-        encoding="utf-8"
-    )
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "command_generation"
+        / "primitive_executor.py"
+    ).read_text(encoding="utf-8")
 
     assert ".agentic-workspace" not in source
 
@@ -2745,7 +3603,9 @@ def test_primitive_registry_rejects_unsupported_target(tmp_path: Path) -> None:
                 "id": "filesystem.read",
                 "kind": "portable",
                 "target_support": {"python": "unsupported"},
-                "unsupported_targets": {"python": "fixture intentionally disables file reads"},
+                "unsupported_targets": {
+                    "python": "fixture intentionally disables file reads"
+                },
             }
         ]
     )
@@ -2787,7 +3647,9 @@ def test_primitive_registry_checks_steps_inside_fragments(tmp_path: Path) -> Non
                 "id": "filesystem.read",
                 "kind": "portable",
                 "target_support": {"python": "unsupported"},
-                "unsupported_targets": {"python": "fixture intentionally disables file reads"},
+                "unsupported_targets": {
+                    "python": "fixture intentionally disables file reads"
+                },
             }
         ]
     )
@@ -2812,10 +3674,15 @@ def test_primitive_registry_round_trips_host_metadata() -> None:
                 "input_schema_ref": "contracts/operations/todo.list.report.json#/inputs",
                 "output_schema_ref": "contracts/operations/todo.list.report.json#/output",
                 "effects": {"read_only": True, "writes_repo_state": False},
-                "target_support": {"python": "host-implemented", "typescript": "unsupported"},
+                "target_support": {
+                    "python": "host-implemented",
+                    "typescript": "unsupported",
+                },
                 "owner": "fixture",
                 "conformance_ref": "todo.list.process",
-                "unsupported_targets": {"typescript": "fixture has no TypeScript domain runtime"},
+                "unsupported_targets": {
+                    "typescript": "fixture has no TypeScript domain runtime"
+                },
             }
         ]
     )
@@ -2828,7 +3695,10 @@ def test_primitive_registry_round_trips_host_metadata() -> None:
     assert definition.conformance_refs == ("todo.list.process",)
     with pytest.raises(ValueError, match="fixture has no TypeScript domain runtime"):
         registry.ensure_supported("todo.domain.load", "typescript")
-    assert registry.to_jsonable()[0]["unsupported_targets"]["typescript"] == "fixture has no TypeScript domain runtime"
+    assert (
+        registry.to_jsonable()[0]["unsupported_targets"]["typescript"]
+        == "fixture has no TypeScript domain runtime"
+    )
 
 
 def test_builtin_registry_declares_portable_primitives() -> None:
@@ -2843,7 +3713,9 @@ def test_builtin_registry_declares_portable_primitives() -> None:
 
 
 def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
-    definitions = {item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()}
+    definitions = {
+        item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()
+    }
 
     assert {item["kind"] for item in definitions.values()} <= {"portable", "host-owned"}
     assert definitions["filesystem.read"]["kind"] == "portable"
@@ -2853,10 +3725,17 @@ def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
     assert definitions["transaction.plan"]["kind"] == "portable"
     assert definitions["operation.call"]["kind"] == "host-owned"
     assert definitions["operation.call"]["target_support"]["python"] == "implemented"
-    assert definitions["operation.call"]["target_support"]["typescript"] == "unsupported"
+    assert (
+        definitions["operation.call"]["target_support"]["typescript"] == "unsupported"
+    )
     assert definitions["operation.dispatch"]["kind"] == "host-owned"
-    assert definitions["operation.dispatch"]["target_support"]["python"] == "implemented"
-    assert definitions["operation.dispatch"]["target_support"]["typescript"] == "unsupported"
+    assert (
+        definitions["operation.dispatch"]["target_support"]["python"] == "implemented"
+    )
+    assert (
+        definitions["operation.dispatch"]["target_support"]["typescript"]
+        == "unsupported"
+    )
     assert definitions["python.function.call"]["kind"] == "host-owned"
     assert definitions["typescript.domain.execute"]["kind"] == "host-owned"
 
@@ -2864,7 +3743,9 @@ def test_builtin_registry_classifies_primitive_ownership_boundaries() -> None:
 
 
 def test_transitional_primitives_are_absent_from_builtin_registry() -> None:
-    definitions = {item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()}
+    definitions = {
+        item["id"]: item for item in BUILTIN_PORTABLE_PRIMITIVES.to_jsonable()
+    }
     removed_ids = {
         "workspace.root.resolve",
         "payload.status",
@@ -2884,12 +3765,16 @@ def test_transitional_primitives_are_absent_from_builtin_registry() -> None:
 
 def test_downstream_specific_primitive_coordination_docs_are_removed() -> None:
     root = Path(__file__).resolve().parents[1]
-    registry_source = (root / "src" / "command_generation" / "primitive_registry.py").read_text(encoding="utf-8")
+    registry_source = (
+        root / "src" / "command_generation" / "primitive_registry.py"
+    ).read_text(encoding="utf-8")
 
     assert "agentic-workspace" not in registry_source
     assert "--aw-primitive-ownership" not in registry_source
     assert not (root / "docs" / "transitional-primitive-retirement.md").exists()
-    assert not (root / "docs" / "transitional-primitive-downstream-coordination.md").exists()
+    assert not (
+        root / "docs" / "transitional-primitive-downstream-coordination.md"
+    ).exists()
 
 
 def _target_extension_contract(**overrides: object) -> dict[str, object]:
@@ -2929,7 +3814,11 @@ def _target_extension_contract(**overrides: object) -> dict[str, object]:
         },
         "maintenance_boundary": {
             "per_operation_feature_maintenance": False,
-            "allowed": ["runtime dependency updates", "target compatibility fixes", "projection bugs"],
+            "allowed": [
+                "runtime dependency updates",
+                "target compatibility fixes",
+                "projection bugs",
+            ],
         },
     }
     contract.update(overrides)
@@ -2975,8 +3864,12 @@ def test_target_extension_contract_validates_and_projects_matrix_entries() -> No
     )
 
 
-def test_required_target_proof_matrix_requires_evidence_for_implemented_targets() -> None:
-    required = required_target_proof_matrix_entries([_target_extension_contract(), _typescript_target_extension_contract()])
+def test_required_target_proof_matrix_requires_evidence_for_implemented_targets() -> (
+    None
+):
+    required = required_target_proof_matrix_entries(
+        [_target_extension_contract(), _typescript_target_extension_contract()]
+    )
     evidence_inventory = current_target_proof_evidence_inventory()
     evidence_ids = {item["evidence_id"] for item in evidence_inventory}
 
@@ -2996,18 +3889,26 @@ def test_required_target_proof_matrix_requires_evidence_for_implemented_targets(
         "runtime-boundary",
         "primitive-support",
     }
-    assert all(item["source"].startswith("tests/test_public_api.py::test_") for item in evidence_inventory)
+    assert all(
+        item["source"].startswith("tests/test_public_api.py::test_")
+        for item in evidence_inventory
+    )
     assert missing_target_proof_matrix_entries(required, evidence_ids) == ()
 
 
 def test_structured_target_proof_evidence_inventory_types_current_evidence() -> None:
-    required = required_target_proof_matrix_entries([_target_extension_contract(), _typescript_target_extension_contract()])
+    required = required_target_proof_matrix_entries(
+        [_target_extension_contract(), _typescript_target_extension_contract()]
+    )
     required_by_id = {entry["evidence_id"]: entry for entry in required}
     structured = structured_target_proof_evidence_inventory()
     flat = current_target_proof_evidence_inventory()
 
     assert {item["evidence_id"] for item in structured} == set(required_by_id)
-    assert flat == tuple({"evidence_id": item["evidence_id"], "source": item["source"]} for item in structured)
+    assert flat == tuple(
+        {"evidence_id": item["evidence_id"], "source": item["source"]}
+        for item in structured
+    )
     assert {item["evidence_type"] for item in structured} == {
         "conformance-case",
         "ordinary-test",
@@ -3024,7 +3925,9 @@ def test_structured_target_proof_evidence_inventory_types_current_evidence() -> 
 def test_required_target_proof_matrix_reports_missing_evidence() -> None:
     required = required_target_proof_matrix_entries([_target_extension_contract()])
 
-    missing = missing_target_proof_matrix_entries(required, {"python:python.function:direct-operation-success"})
+    missing = missing_target_proof_matrix_entries(
+        required, {"python:python.function:direct-operation-success"}
+    )
 
     assert {entry["proof_kind"] for entry in missing} == {
         "direct-operation-structured-error",
@@ -3057,7 +3960,9 @@ def test_target_extension_contract_rejects_product_semantics_ownership() -> None
         }
     )
 
-    with pytest.raises(TargetExtensionContractError, match="target_owns_product_semantics"):
+    with pytest.raises(
+        TargetExtensionContractError, match="target_owns_product_semantics"
+    ):
         validate_target_extension_contract(contract)
 
 
@@ -3069,5 +3974,7 @@ def test_target_extension_contract_rejects_per_operation_feature_maintenance() -
         }
     )
 
-    with pytest.raises(TargetExtensionContractError, match="per_operation_feature_maintenance"):
+    with pytest.raises(
+        TargetExtensionContractError, match="per_operation_feature_maintenance"
+    ):
         validate_target_extension_contract(contract)

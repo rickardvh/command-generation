@@ -37,10 +37,16 @@ def _typescript_resource_copy_outputs(
         generated_root = root / "resources" / str(copy["generated_root"])
         required_marker = str(copy.get("required_marker") or "")
         if required_marker and not (source_root / required_marker).is_file():
-            raise FileNotFoundError(f"missing required resource marker: {(source_root / required_marker).as_posix()}")
+            raise FileNotFoundError(
+                f"missing required resource marker: {(source_root / required_marker).as_posix()}"
+            )
         for source in _resource_copy_source_files(source_root):
             relative = source.relative_to(source_root)
-            outputs.append(GeneratedOutput(generated_root / relative, source.read_text(encoding="utf-8")))
+            outputs.append(
+                GeneratedOutput(
+                    generated_root / relative, source.read_text(encoding="utf-8")
+                )
+            )
 
     operation_contract_root = repo_root / str(package["operation_contract_root"])
     native_ids = _typescript_native_operation_ids(package)
@@ -49,7 +55,11 @@ def _typescript_resource_copy_outputs(
         for operation_ref in _command_operation_refs(command):
             operation_id = str(operation_ref.get("id", ""))
             operation_path = str(operation_ref.get("path", ""))
-            if operation_id not in native_ids or not operation_path or operation_path in emitted_operation_paths:
+            if (
+                operation_id not in native_ids
+                or not operation_path
+                or operation_path in emitted_operation_paths
+            ):
                 continue
             source = operation_contract_root / operation_path
             operation = (
@@ -64,7 +74,12 @@ def _typescript_resource_copy_outputs(
             outputs.append(
                 GeneratedOutput(
                     root / "resources" / operation_path,
-                    _json_block(_typescript_executable_operation(operation, operation_id=operation_id)) + "\n",
+                    _json_block(
+                        _typescript_executable_operation(
+                            operation, operation_id=operation_id
+                        )
+                    )
+                    + "\n",
                 )
             )
     return outputs
@@ -80,7 +95,9 @@ def _typescript_native_operation_ids(package: dict[str, Any]) -> set[str]:
     return operation_ids
 
 
-def _typescript_executable_operation(operation: dict[str, Any], *, operation_id: str) -> dict[str, Any]:
+def _typescript_executable_operation(
+    operation: dict[str, Any], *, operation_id: str
+) -> dict[str, Any]:
     ir_plan = operation.get("ir_plan", {})
     steps = ir_plan.get("steps", []) if isinstance(ir_plan, dict) else []
     if isinstance(steps, list) and steps:
@@ -126,7 +143,9 @@ def _typescript_package_json(
         "private": True,
         "type": "module",
         "files": ["src", "resources"],
-        "bin": {entrypoint: "./src/cli.mjs" for entrypoint in target["entrypoints"]} if _is_runnable_typescript_target(target) else {},
+        "bin": {entrypoint: "./src/cli.mjs" for entrypoint in target["entrypoints"]}
+        if _is_runnable_typescript_target(target)
+        else {},
         "scripts": {"test": "node --test test/command-package.test.mjs"},
         "agenticWorkspace": {
             "generated": True,
@@ -153,7 +172,9 @@ def _typescript_package_json(
     return _json_block(payload) + "\n"
 
 
-def _typescript_module(package: dict[str, Any], *, source_path: str, regenerate_command: str) -> str:
+def _typescript_module(
+    package: dict[str, Any], *, source_path: str, regenerate_command: str
+) -> str:
     return (
         "// Generated command package metadata.\n"
         f"// Source: {source_path}\n"
@@ -287,13 +308,19 @@ def _typescript_native_runtime_helpers(*, recovery_command: str) -> str:
     )
 
 
-def _host_runtime_support_label(*, host_manifest: CommandGenerationHostManifest, support_path: Path) -> str:
+def _host_runtime_support_label(
+    *, host_manifest: CommandGenerationHostManifest, support_path: Path
+) -> str:
     if not support_path.is_absolute():
         return support_path.as_posix()
     if host_manifest.generated_root is None:
         return support_path.name
     try:
-        return support_path.resolve().relative_to(host_manifest.generated_root.resolve().parent).as_posix()
+        return (
+            support_path.resolve()
+            .relative_to(host_manifest.generated_root.resolve().parent)
+            .as_posix()
+        )
     except ValueError:
         return support_path.name
 
@@ -313,9 +340,7 @@ def _typescript_runtime_module(
             support_path=host_manifest.typescript_primitive_support_path,
         )
         support_import = "import { executeHostPrimitive as configuredHostPrimitive } from './hostPrimitiveSupport.mjs';\n"
-        configured_host_primitive_call = (
-            "  if (typeof configuredHostPrimitive === 'function') return configuredHostPrimitive(primitive, values, args, operationId);\n"
-        )
+        configured_host_primitive_call = "  if (typeof configuredHostPrimitive === 'function') return configuredHostPrimitive(primitive, values, args, operationId);\n"
     return f"""// Generated native TypeScript operation runtime.
 // Source: {source_path}
 // Host primitive support: {support_label}
@@ -473,27 +498,264 @@ function fieldByPath(root, dottedPath) {{
   return [true, current];
 }}
 
-function selectorTokens(value) {{
-  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
-  return String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+const MAX_PROJECTION_SELECTORS = 32;
+const MAX_PROJECTION_SELECTOR_BYTES = 256;
+const MAX_PROJECTION_SELECTOR_REQUEST_BYTES = 512;
+const MAX_SELECTOR_ERROR_TEXT_BYTES = 128;
+const MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES = 96;
+const MAX_SELECTOR_INVENTORY_SAMPLE_BYTES = 384;
+const MAX_SELECTOR_ERROR_ENVELOPE_BYTES = 6000;
+const SELECTOR_INVENTORY_SAMPLE_LIMIT = 8;
+const SELECTOR_SUGGESTION_LIMIT = 1;
+
+function utf8Size(value) {{
+  return new TextEncoder().encode(String(value)).length;
 }}
 
-function availableSelectorsForPayload(payload, prefix = '') {{
+function utf8Compare(left, right) {{
+  const leftBytes = new TextEncoder().encode(String(left));
+  const rightBytes = new TextEncoder().encode(String(right));
+  const length = Math.min(leftBytes.length, rightBytes.length);
+  for (let index = 0; index < length; index += 1) {{
+    if (leftBytes[index] !== rightBytes[index]) return leftBytes[index] - rightBytes[index];
+  }}
+  return leftBytes.length - rightBytes.length;
+}}
+
+function boundedSelectorErrorText(value) {{
+  const text = String(value ?? '');
+  return utf8Size(text) <= MAX_SELECTOR_ERROR_TEXT_BYTES ? text : '';
+}}
+
+function selectorErrorJsonSize(payload) {{
+  return utf8Size(JSON.stringify(payload));
+}}
+
+function fitSelectorErrorEnvelope(payload) {{
+  if (selectorErrorJsonSize(payload) <= MAX_SELECTOR_ERROR_ENVELOPE_BYTES) return payload;
+  if (isObject(payload.suggestions)) {{
+    for (const key of Object.keys(payload.suggestions)) delete payload.suggestions[key];
+  }}
+  if (selectorErrorJsonSize(payload) <= MAX_SELECTOR_ERROR_ENVELOPE_BYTES) return payload;
+  if (isObject(payload.selector_inventory)) {{
+    payload.selector_inventory.sample = [];
+    payload.selector_inventory.discovery_command = '';
+    payload.selector_inventory.inventory_command = '';
+  }}
+  if (selectorErrorJsonSize(payload) <= MAX_SELECTOR_ERROR_ENVELOPE_BYTES) return payload;
+  payload.requested_selectors = [];
+  payload.unknown_selectors = [];
+  return payload;
+}}
+
+function selectorLimitError(reason, requestedSelectorCount, selectorRequestBytes, selectorIndex = null, selectorBytes = null) {{
+  const error = {{
+    reason,
+    requested_selector_count: requestedSelectorCount,
+    selector_request_bytes: selectorRequestBytes,
+    max_selectors: MAX_PROJECTION_SELECTORS,
+    max_selector_bytes: MAX_PROJECTION_SELECTOR_BYTES,
+    max_selector_request_bytes: MAX_PROJECTION_SELECTOR_REQUEST_BYTES
+  }};
+  if (selectorIndex !== null) error.selector_index = selectorIndex;
+  if (selectorBytes !== null) error.selector_bytes = selectorBytes;
+  return error;
+}}
+
+function selectorTokensFromArray(value) {{
   const selectors = [];
-  if (isObject(payload)) {{
-    for (const key of Object.keys(payload).map(String).sort()) {{
-      const path = prefix ? `${{prefix}}.${{key}}` : key;
-      selectors.push(path);
-      selectors.push(...availableSelectorsForPayload(payload[key], path));
+  let requestedSelectorCount = 0;
+  let selectorRequestBytes = 0;
+  for (const item of value) {{
+    const token = String(item).trim();
+    if (!token) continue;
+    const tokenBytes = utf8Size(token);
+    requestedSelectorCount += 1;
+    if (requestedSelectorCount > MAX_PROJECTION_SELECTORS) {{
+      return {{ selectors, error: selectorLimitError('too-many-selectors', requestedSelectorCount, selectorRequestBytes, requestedSelectorCount - 1) }};
     }}
-  }} else if (Array.isArray(payload)) {{
-    for (const [index, item] of payload.slice(0, 10).entries()) {{
-      const path = prefix ? `${{prefix}}.${{index}}` : String(index);
-      selectors.push(path);
-      selectors.push(...availableSelectorsForPayload(item, path));
+    if (tokenBytes > MAX_PROJECTION_SELECTOR_BYTES) {{
+      return {{ selectors, error: selectorLimitError('selector-too-long', requestedSelectorCount, selectorRequestBytes + tokenBytes, requestedSelectorCount - 1, tokenBytes) }};
+    }}
+    if (selectorRequestBytes + tokenBytes > MAX_PROJECTION_SELECTOR_REQUEST_BYTES) {{
+      return {{ selectors, error: selectorLimitError('selector-request-too-large', requestedSelectorCount, selectorRequestBytes + tokenBytes, requestedSelectorCount - 1) }};
+    }}
+    selectorRequestBytes += tokenBytes;
+    selectors.push(token);
+  }}
+  return {{ selectors, error: null }};
+}}
+
+function selectorTokensFromString(value) {{
+  const selectors = [];
+  let requestedSelectorCount = 0;
+  let selectorRequestBytes = 0;
+  let token = '';
+  let tokenBytes = 0;
+  let pendingWhitespace = 0;
+  let seenNonWhitespace = false;
+  function appendSelector() {{
+    if (!token) return null;
+    const appendedTokenBytes = tokenBytes;
+    requestedSelectorCount += 1;
+    if (requestedSelectorCount > MAX_PROJECTION_SELECTORS) {{
+      token = '';
+      tokenBytes = 0;
+      pendingWhitespace = 0;
+      return selectorLimitError('too-many-selectors', requestedSelectorCount, selectorRequestBytes, requestedSelectorCount - 1);
+    }}
+    if (selectorRequestBytes + appendedTokenBytes > MAX_PROJECTION_SELECTOR_REQUEST_BYTES) {{
+      token = '';
+      tokenBytes = 0;
+      pendingWhitespace = 0;
+      return selectorLimitError('selector-request-too-large', requestedSelectorCount, selectorRequestBytes + appendedTokenBytes, requestedSelectorCount - 1);
+    }}
+    selectorRequestBytes += appendedTokenBytes;
+    selectors.push(token);
+    token = '';
+    tokenBytes = 0;
+    pendingWhitespace = 0;
+    return null;
+  }}
+  for (const char of String(value ?? '')) {{
+    if (char === ',') {{
+      const error = appendSelector();
+      if (error) return {{ selectors, error }};
+      seenNonWhitespace = false;
+      continue;
+    }}
+    if (/\\s/u.test(char) && !seenNonWhitespace) continue;
+    if (/\\s/u.test(char)) {{
+      pendingWhitespace += 1;
+      continue;
+    }}
+    if (pendingWhitespace) {{
+      token += ' '.repeat(pendingWhitespace);
+      tokenBytes += pendingWhitespace;
+      pendingWhitespace = 0;
+    }}
+    seenNonWhitespace = true;
+    token += char;
+    tokenBytes += utf8Size(char);
+    if (tokenBytes > MAX_PROJECTION_SELECTOR_BYTES) {{
+      requestedSelectorCount += 1;
+      return {{
+        selectors,
+        error: selectorLimitError('selector-too-long', requestedSelectorCount, selectorRequestBytes + tokenBytes, requestedSelectorCount - 1, tokenBytes)
+      }};
     }}
   }}
-  return selectors;
+  return {{ selectors, error: appendSelector() }};
+}}
+
+function selectorTokens(value) {{
+  if (Array.isArray(value)) return selectorTokensFromArray(value);
+  return selectorTokensFromString(value);
+}}
+
+function selectorInventorySummary(payload, sampleLimit = 8) {{
+  let count = 0;
+  const sampleCandidates = [];
+  function recordSample(path) {{
+    if (sampleLimit <= 0) return;
+    const pathBytes = utf8Size(path);
+    if (pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES) return;
+    sampleCandidates.push(path);
+    sampleCandidates.sort(utf8Compare);
+    if (sampleCandidates.length > sampleLimit) sampleCandidates.pop();
+  }}
+  function budgetedSample() {{
+    const sample = [];
+    let sampleBytes = 0;
+    for (const path of sampleCandidates) {{
+      const pathBytes = utf8Size(path);
+      if (sampleBytes + pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_BYTES) break;
+      sample.push(path);
+      sampleBytes += pathBytes;
+    }}
+    return sample;
+  }}
+  function visit(current, prefix) {{
+    if (Array.isArray(current)) {{
+      for (let index = 0; index < current.length; index += 1) {{
+        const path = prefix ? `${{prefix}}.${{index}}` : String(index);
+        count += 1;
+        recordSample(path);
+        visit(current[index], path);
+      }}
+      return;
+    }}
+    if (isObject(current)) {{
+      for (const key in current) {{
+        if (!Object.prototype.hasOwnProperty.call(current, key)) continue;
+        const path = prefix ? `${{prefix}}.${{key}}` : key;
+        count += 1;
+        recordSample(path);
+        visit(current[key], path);
+      }}
+    }}
+  }}
+  visit(payload, '');
+  return {{ count, sample: budgetedSample() }};
+}}
+
+function selectorValidationKind(selectedOutputKind) {{
+  const kind = String(selectedOutputKind ?? '');
+  let validationKind = 'command-generation/selector-validation-error/v1';
+  if (kind.includes('/selected-output/')) validationKind = kind.replace('/selected-output/', '/selector-validation-error/');
+  else if (kind.endsWith('/selected-output')) validationKind = `${{kind.slice(0, -'/selected-output'.length)}}/selector-validation-error`;
+  return utf8Size(validationKind) <= MAX_SELECTOR_ERROR_TEXT_BYTES ? validationKind : 'command-generation/selector-validation-error/v1';
+}}
+
+function selectorSuggestions(unknown, available, limit = 3) {{
+  const terms = String(unknown).replaceAll('_', '.').split('.').filter(Boolean);
+  const matches = [];
+  for (const selector of available) {{
+    const selectorTerms = String(selector).split('.');
+    if (String(selector).includes(String(unknown)) || terms.some((term) => selectorTerms.includes(term) || String(selector).includes(term))) {{
+      matches.push(selector);
+    }}
+    if (matches.length >= limit) return matches;
+  }}
+  return available.slice(0, limit);
+}}
+
+function selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind, discoveryCommand, detailCommand) {{
+  const sampleLimit = SELECTOR_INVENTORY_SAMPLE_LIMIT;
+  const {{ count, sample: available }} = selectorInventorySummary(payload, sampleLimit);
+  const suggestions = {{}};
+  for (const selector of missing) suggestions[selector] = selectorSuggestions(selector, available, SELECTOR_SUGGESTION_LIMIT);
+  const error = {{
+    kind: selectorValidationKind(selectedOutputKind),
+    status: 'invalid-selector',
+    source_command: boundedSelectorErrorText(sourceCommand),
+    requested_selectors: selectors,
+    unknown_selectors: missing,
+    selector_inventory: {{
+      status: 'omitted-from-validation-error',
+      available_count: count,
+      sample: available,
+      sample_limit: sampleLimit,
+      discovery_command: boundedSelectorErrorText(discoveryCommand),
+      inventory_command: boundedSelectorErrorText(detailCommand),
+      rule: 'Full selector inventories are omitted from validation errors; use the inventory command for complete details.'
+    }},
+    suggestions,
+    validation_rule: 'Selector requests are atomic: any unknown selector prevents partial projection output.'
+  }};
+  return fitSelectorErrorEnvelope(error);
+}}
+
+function selectorRequestValidationError(selectors, requestError, sourceCommand, selectedOutputKind) {{
+  const error = {{
+    kind: selectorValidationKind(selectedOutputKind),
+    status: 'invalid-selector-request',
+    source_command: boundedSelectorErrorText(sourceCommand),
+    requested_selectors: selectors,
+    selector_request: {{ status: 'rejected', ...requestError }},
+    validation_rule: 'Selector requests are bounded and atomic: too many selectors or overlong selectors are rejected before projection.'
+  }};
+  return fitSelectorErrorEnvelope(error);
 }}
 
 function projectPayload(values, args) {{
@@ -501,23 +763,21 @@ function projectPayload(values, args) {{
   if (!Object.prototype.hasOwnProperty.call(values, sourceName)) throw new RuntimeError(`payload.project source value is missing: ${{sourceName}}`);
   const payload = values[sourceName];
   const selectValueName = String(args.select_value ?? 'select');
-  const selectors = selectorTokens(args.selectors ?? values[selectValueName]);
+  const selectedOutputKind = String(args.selected_output_kind ?? 'command-generation/selected-output/v1');
+  const sourceCommand = String(args.source_command ?? values.operation_id ?? '');
+  const selectorRequest = selectorTokens(args.selectors ?? values[selectValueName]);
+  const selectors = selectorRequest.selectors;
+  if (selectorRequest.error) return selectorRequestValidationError(selectors, selectorRequest.error, sourceCommand, selectedOutputKind);
   if (selectors.length === 0) return payload;
-  const selected = {{
-    kind: String(args.selected_output_kind ?? 'command-generation/selected-output/v1'),
-    source_command: String(args.source_command ?? values.operation_id ?? ''),
-    values: {{}}
-  }};
-  const missing = [];
+  const discoveryCommand = String(args.selector_inventory_command ?? '');
+  const detailCommand = String(args.selector_detail_command ?? '');
+  const missing = selectors.filter((selector) => !fieldByPath(payload, selector)[0]);
+  if (missing.length) return selectorValidationError(payload, selectors, missing, sourceCommand, selectedOutputKind, discoveryCommand, detailCommand);
+  const selected = {{ kind: selectedOutputKind, source_command: sourceCommand, values: {{}} }};
   for (const selector of selectors) {{
     const [found, value] = fieldByPath(payload, selector);
     if (found) selected.values[selector] = value;
     else missing.push(selector);
-  }}
-  if (missing.length) {{
-    selected.missing = missing;
-    selected.selector_rule = 'Comma-separated dot paths select exact JSON fields; unknown fields are reported in missing.';
-    selected.available_selectors = availableSelectorsForPayload(payload);
   }}
   return selected;
 }}
@@ -1041,7 +1301,9 @@ def _typescript_host_primitive_support_module(
         host_manifest=host_manifest,
         support_path=host_manifest.typescript_primitive_support_path,
     )
-    support = host_manifest.typescript_primitive_support_path.read_text(encoding="utf-8")
+    support = host_manifest.typescript_primitive_support_path.read_text(
+        encoding="utf-8"
+    )
     return (
         "// Generated target-local host primitive support module.\n"
         f"// Source: {source_path}\n"
@@ -1062,15 +1324,21 @@ def _typescript_cli_module(
     source_path: str,
     regenerate_command: str,
 ) -> str:
-    command_names = sorted(command["command"]["name"] for command in package["commands"])
+    command_names = sorted(
+        command["command"]["name"] for command in package["commands"]
+    )
     rendered_commands = json.dumps(command_names)
-    rendered_interfaces = json.dumps(_typescript_interface_payload(package), indent=2, sort_keys=True)
+    rendered_interfaces = json.dumps(
+        _typescript_interface_payload(package), indent=2, sort_keys=True
+    )
     native_operation_ids = sorted(_typescript_native_operation_ids(package))
     rendered_native_operation_ids = json.dumps(native_operation_ids)
     weak_agent_status = _weak_agent_routing_for_target(target, maturity_levels)
     recovery_command = f"{target['entrypoints'][0]} --help"
     boundary_summary = "TypeScript CLI boundary: generated parser, validation, and command execution are Node/TypeScript only."
-    native_helpers = _typescript_native_runtime_helpers(recovery_command=recovery_command)
+    native_helpers = _typescript_native_runtime_helpers(
+        recovery_command=recovery_command
+    )
     return (
         "#!/usr/bin/env node\n"
         "// Generated runnable adapter.\n"
@@ -1239,7 +1507,9 @@ def _typescript_mock_runtime() -> str:
 
 
 def _typescript_required_option_case(package: dict[str, Any]) -> dict[str, Any] | None:
-    def find_required(interface: dict[str, Any], path: list[str]) -> dict[str, Any] | None:
+    def find_required(
+        interface: dict[str, Any], path: list[str]
+    ) -> dict[str, Any] | None:
         for option in interface.get("options", []):
             if isinstance(option, dict) and option.get("required") is True:
                 flags = option.get("flags", [])
@@ -1303,16 +1573,28 @@ def _typescript_sample_invocations(command: dict[str, Any]) -> dict[str, Any]:
     command_name = str(command.get("command", {}).get("name", "")).strip()
     interface = command.get("interface", {})
     if not command_name or not isinstance(interface, dict):
-        return {"json_args": [], "spaced_args": [], "path": [], "requires_subcommand": False, "format_path": []}
+        return {
+            "json_args": [],
+            "spaced_args": [],
+            "path": [],
+            "requires_subcommand": False,
+            "format_path": [],
+        }
     path = [command_name]
     current = interface
     requires_subcommand = False
     while True:
-        subcommands = [item for item in current.get("subcommands", []) if isinstance(item, dict)]
-        subcommands_required = bool(subcommands and current.get("subcommands_required") is not False)
+        subcommands = [
+            item for item in current.get("subcommands", []) if isinstance(item, dict)
+        ]
+        subcommands_required = bool(
+            subcommands and current.get("subcommands_required") is not False
+        )
         if not subcommands_required:
             break
-        first_subcommand = sorted(subcommands, key=lambda item: str(item.get("name", "")))[0]
+        first_subcommand = sorted(
+            subcommands, key=lambda item: str(item.get("name", ""))
+        )[0]
         subcommand_name = str(first_subcommand.get("name", "")).strip()
         if not subcommand_name:
             break
@@ -1323,14 +1605,22 @@ def _typescript_sample_invocations(command: dict[str, Any]) -> dict[str, Any]:
     required_positionals = [
         item
         for item in current.get("arguments", [])
-        if isinstance(item, dict) and item.get("nargs") != "?" and item.get("default") is None
+        if isinstance(item, dict)
+        and item.get("nargs") != "?"
+        and item.get("default") is None
     ]
-    required_options = [item for item in current.get("options", []) if isinstance(item, dict) and item.get("required") is True]
+    required_options = [
+        item
+        for item in current.get("options", [])
+        if isinstance(item, dict) and item.get("required") is True
+    ]
     json_args = list(path)
     spaced_args: list[str] = []
     spaced_arg_index: int | None = None
     for argument in required_positionals:
-        value = _typescript_sample_value(argument, fallback=str(argument.get("name") or "value"))
+        value = _typescript_sample_value(
+            argument, fallback=str(argument.get("name") or "value")
+        )
         if spaced_arg_index is None and argument.get("type") != "integer":
             spaced_arg_index = len(json_args)
         json_args.append(value)
@@ -1352,18 +1642,27 @@ def _typescript_sample_invocations(command: dict[str, Any]) -> dict[str, Any]:
         (
             item
             for item in current.get("options", [])
-            if isinstance(item, dict) and item.get("name") == "format" and _typescript_option_flag(item)
+            if isinstance(item, dict)
+            and item.get("name") == "format"
+            and _typescript_option_flag(item)
         ),
         None,
     )
     format_path = list(json_args)
     if format_option is not None:
-        json_args.extend([_typescript_option_flag(format_option), _typescript_sample_value(format_option, fallback="json")])
+        json_args.extend(
+            [
+                _typescript_option_flag(format_option),
+                _typescript_sample_value(format_option, fallback="json"),
+            ]
+        )
     dry_run_option = next(
         (
             item
             for item in current.get("options", [])
-            if isinstance(item, dict) and item.get("name") == "dry_run" and _typescript_option_flag(item)
+            if isinstance(item, dict)
+            and item.get("name") == "dry_run"
+            and _typescript_option_flag(item)
         ),
         None,
     )
@@ -1382,10 +1681,16 @@ def _typescript_sample_invocations(command: dict[str, Any]) -> dict[str, Any]:
 
 
 def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
-    expected_commands = sorted(command["command"]["name"] for command in package["commands"])
+    expected_commands = sorted(
+        command["command"]["name"] for command in package["commands"]
+    )
     rendered_expected = json.dumps(expected_commands)
     sample_command = expected_commands[0]
-    sample_command_record = next(command for command in package["commands"] if command["command"]["name"] == sample_command)
+    sample_command_record = next(
+        command
+        for command in package["commands"]
+        if command["command"]["name"] == sample_command
+    )
     sample_invocations = _typescript_sample_invocations(sample_command_record)
     sample_path = sample_invocations["path"]
     sample_requires_subcommand = bool(sample_invocations["requires_subcommand"])
@@ -1406,7 +1711,9 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
         "  assert.match(result.stdout, /Node\\/TypeScript only/);\n"
         "  assert.doesNotMatch(result.stdout, /Python runtime handoff/);\n"
     )
-    imports = "import assert from 'node:assert/strict';\nimport test from 'node:test';\n"
+    imports = (
+        "import assert from 'node:assert/strict';\nimport test from 'node:test';\n"
+    )
     if runnable:
         imports += "import { spawnSync } from 'node:child_process';\nimport { fileURLToPath } from 'node:url';\n"
     imports += "import { mkdirSync, readFileSync, rmSync } from 'node:fs';\n"
@@ -1550,7 +1857,9 @@ def _typescript_test(package: dict[str, Any], target: dict[str, Any]) -> str:
     return body
 
 
-def _target_scoped_package_resource(package: dict[str, Any], target: dict[str, Any], *, manifest_schema_version: str) -> dict[str, Any]:
+def _target_scoped_package_resource(
+    package: dict[str, Any], target: dict[str, Any], *, manifest_schema_version: str
+) -> dict[str, Any]:
     scoped = package_resource_with_generation_metadata(
         package,
         manifest_schema_version=manifest_schema_version,
@@ -1596,15 +1905,31 @@ def render_typescript_outputs(
         ),
         GeneratedOutput(
             root / "src" / "commandPackage.ts",
-            _typescript_module(package, source_path=source_path, regenerate_command=regenerate_command),
+            _typescript_module(
+                package, source_path=source_path, regenerate_command=regenerate_command
+            ),
         ),
         GeneratedOutput(
             root / "resources" / "command_package.json",
-            _json_block(_target_scoped_package_resource(package, target, manifest_schema_version=manifest_schema_version)) + "\n",
+            _json_block(
+                _target_scoped_package_resource(
+                    package, target, manifest_schema_version=manifest_schema_version
+                )
+            )
+            + "\n",
         ),
     ]
-    outputs.extend(_typescript_resource_copy_outputs(package, repo_root=repo_root, root=root, host_manifest=host_manifest))
-    outputs.append(GeneratedOutput(root / "test" / "command-package.test.mjs", _typescript_test(package, target)))
+    outputs.extend(
+        _typescript_resource_copy_outputs(
+            package, repo_root=repo_root, root=root, host_manifest=host_manifest
+        )
+    )
+    outputs.append(
+        GeneratedOutput(
+            root / "test" / "command-package.test.mjs",
+            _typescript_test(package, target),
+        )
+    )
     if _is_runnable_typescript_target(target):
         outputs.append(
             GeneratedOutput(

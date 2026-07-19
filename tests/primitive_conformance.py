@@ -128,8 +128,10 @@ def main() -> int:
             arguments={"source_command": "fixture.skills"},
             context=context,
         )
-        assert selected_payload["values"] == {"actions.0.path": "review", "message": "Skills"}
-        assert selected_payload["missing"] == ["missing"]
+        assert selected_payload["status"] == "invalid-selector"
+        assert selected_payload["unknown_selectors"] == ["missing"]
+        assert "values" not in selected_payload
+        assert "available_selectors" not in selected_payload
 
         emitted_json = execute_primitive(
             "output.emit",
