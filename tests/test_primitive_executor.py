@@ -583,8 +583,42 @@ def test_payload_project_rejects_selector_request_limit_violations(
     assert result["status"] == "invalid-selector-request"
     assert result["requested_selectors"] == []
     assert result["selector_request"]["reason"] == "selector-too-long"
-    assert result["selector_request"]["selector_length"] == 257
-    assert result["selector_request"]["max_selector_length"] == 256
+    assert result["selector_request"]["selector_bytes"] == 257
+    assert result["selector_request"]["max_selector_bytes"] == 256
+
+    too_large = [f"{'s' * 14}{index:02d}" for index in range(31)] + [f"{'s' * 15}31"]
+    result = execute_primitive(
+        "payload.project",
+        values={"payload": {}},
+        arguments={
+            "source": "payload",
+            "source_command": "fixture.status",
+            "selectors": too_large,
+        },
+        context=primitive_context,
+    )
+
+    assert result["status"] == "invalid-selector-request"
+    assert len(result["requested_selectors"]) == 31
+    assert result["selector_request"]["reason"] == "selector-request-too-large"
+    assert result["selector_request"]["selector_request_bytes"] == 513
+    assert result["selector_request"]["max_selector_request_bytes"] == 512
+
+    astral = "\U0001f600"
+    result = execute_primitive(
+        "payload.project",
+        values={"payload": {}},
+        arguments={
+            "source": "payload",
+            "source_command": "fixture.status",
+            "selectors": [astral * 65],
+        },
+        context=primitive_context,
+    )
+
+    assert result["status"] == "invalid-selector-request"
+    assert result["selector_request"]["reason"] == "selector-too-long"
+    assert result["selector_request"]["selector_bytes"] == 260
 
 
 def test_payload_project_can_use_declared_selector_list(

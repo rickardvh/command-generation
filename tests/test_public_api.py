@@ -2655,12 +2655,15 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
         "items": [{"name": "alpha"}, {"name": "beta"}],
         "wide": {f"field{i}": i for i in range(80)},
     }
+    source_command = "s" * 128
+    inventory_command = "i" * 128
+    detail_command = "d" * 128
     project_arguments = {
         "source": "result",
-        "source_command": "fixture.review",
+        "source_command": source_command,
         "selected_output_kind": "fixture/custom/selected-output/v1",
-        "selector_inventory_command": "fixture.review selectors --format json",
-        "selector_detail_command": "fixture.review selectors --all --format json",
+        "selector_inventory_command": inventory_command,
+        "selector_detail_command": detail_command,
     }
     operation_path = tmp_path / "contracts" / "operations" / "todo.list.report.json"
     operation = json.loads(operation_path.read_text(encoding="utf-8"))
@@ -2741,6 +2744,11 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
 
+    def compact_json_utf8_size(value: object) -> int:
+        return len(
+            json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        )
+
     selectors = ["summary.count", "items.0.name", *[f"missing{i}" for i in range(30)]]
     invalid_selector_result = interpreter_result(",".join(selectors))
     assert (
@@ -2758,21 +2766,32 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
         selectors[2:]
     )
     assert all(
-        len(suggestions) <= 3
+        len(suggestions) <= 1
         for suggestions in cast(
             dict[str, list[str]], invalid_selector_result["suggestions"]
         ).values()
     )
     inventory = cast(dict[str, object], invalid_selector_result["selector_inventory"])
-    assert inventory["discovery_command"] == "fixture.review selectors --format json"
-    assert (
-        inventory["inventory_command"] == "fixture.review selectors --all --format json"
-    )
+    assert invalid_selector_result["source_command"] == source_command
+    assert inventory["discovery_command"] == inventory_command
+    assert inventory["inventory_command"] == detail_command
     assert len(cast(list[str], inventory["sample"])) <= cast(
         int, inventory["sample_limit"]
     )
     assert "values" not in invalid_selector_result
-    assert len(json.dumps(invalid_selector_result)) < 12000
+    assert compact_json_utf8_size(invalid_selector_result) < 6000
+
+    worst_selectors = [f"{'m' * 14}{index:02d}" for index in range(32)]
+    worst_result = interpreter_result(",".join(worst_selectors))
+    assert (
+        python_result(",".join(worst_selectors))
+        == typescript_result(",".join(worst_selectors))
+        == worst_result
+    )
+    assert worst_result["status"] == "invalid-selector"
+    assert worst_result["requested_selectors"] == worst_selectors
+    assert worst_result["unknown_selectors"] == worst_selectors
+    assert compact_json_utf8_size(worst_result) < 6000
 
     too_many_selectors = ",".join(f"wide.field{i}" for i in range(33))
     too_many_result = interpreter_result(too_many_selectors)
@@ -2789,6 +2808,21 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
     )
     assert "values" not in too_many_result
 
+    too_large_selectors = ",".join(
+        [f"{'s' * 14}{index:02d}" for index in range(31)] + [f"{'s' * 15}31"]
+    )
+    too_large_result = interpreter_result(too_large_selectors)
+    assert (
+        python_result(too_large_selectors)
+        == typescript_result(too_large_selectors)
+        == too_large_result
+    )
+    assert too_large_result["status"] == "invalid-selector-request"
+    too_large_request = cast(dict[str, object], too_large_result["selector_request"])
+    assert too_large_request["reason"] == "selector-request-too-large"
+    assert too_large_request["selector_request_bytes"] == 513
+    assert compact_json_utf8_size(too_large_result) < 6000
+
     overlong_result = interpreter_result("x" * 257)
     assert python_result("x" * 257) == typescript_result("x" * 257) == overlong_result
     assert overlong_result["status"] == "invalid-selector-request"
@@ -2797,6 +2831,34 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
         cast(dict[str, object], overlong_result["selector_request"])["reason"]
         == "selector-too-long"
     )
+    assert compact_json_utf8_size(overlong_result) < 6000
+
+    astral = "\U0001f600"
+    accepted_astral = astral * 64
+    accepted_astral_result = interpreter_result(accepted_astral)
+    assert (
+        python_result(accepted_astral)
+        == typescript_result(accepted_astral)
+        == accepted_astral_result
+    )
+    assert accepted_astral_result["status"] == "invalid-selector"
+    assert accepted_astral_result["requested_selectors"] == [accepted_astral]
+    assert compact_json_utf8_size(accepted_astral_result) < 6000
+
+    rejected_astral = astral * 65
+    rejected_astral_result = interpreter_result(rejected_astral)
+    assert (
+        python_result(rejected_astral)
+        == typescript_result(rejected_astral)
+        == rejected_astral_result
+    )
+    assert rejected_astral_result["status"] == "invalid-selector-request"
+    rejected_astral_request = cast(
+        dict[str, object], rejected_astral_result["selector_request"]
+    )
+    assert rejected_astral_request["reason"] == "selector-too-long"
+    assert rejected_astral_request["selector_bytes"] == 260
+    assert compact_json_utf8_size(rejected_astral_result) < 6000
 
 
 def test_generated_module_front_door_handler_delegates_with_data_driven_argv_and_help() -> (

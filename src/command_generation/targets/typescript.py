@@ -499,35 +499,78 @@ function fieldByPath(root, dottedPath) {{
 }}
 
 const MAX_PROJECTION_SELECTORS = 32;
-const MAX_PROJECTION_SELECTOR_LENGTH = 256;
+const MAX_PROJECTION_SELECTOR_BYTES = 256;
+const MAX_PROJECTION_SELECTOR_REQUEST_BYTES = 512;
+const MAX_SELECTOR_ERROR_TEXT_BYTES = 128;
+const MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES = 96;
+const MAX_SELECTOR_INVENTORY_SAMPLE_BYTES = 384;
+const MAX_SELECTOR_ERROR_ENVELOPE_BYTES = 6000;
 const SELECTOR_INVENTORY_SAMPLE_LIMIT = 8;
-const SELECTOR_SUGGESTION_LIMIT = 3;
+const SELECTOR_SUGGESTION_LIMIT = 1;
 
-function selectorLimitError(reason, requestedSelectorCount, selectorIndex = null, selectorLength = null) {{
+function utf8Size(value) {{
+  return new TextEncoder().encode(String(value)).length;
+}}
+
+function boundedSelectorErrorText(value) {{
+  const text = String(value ?? '');
+  return utf8Size(text) <= MAX_SELECTOR_ERROR_TEXT_BYTES ? text : '';
+}}
+
+function selectorErrorJsonSize(payload) {{
+  return utf8Size(JSON.stringify(payload));
+}}
+
+function fitSelectorErrorEnvelope(payload) {{
+  if (selectorErrorJsonSize(payload) <= MAX_SELECTOR_ERROR_ENVELOPE_BYTES) return payload;
+  if (isObject(payload.suggestions)) {{
+    for (const key of Object.keys(payload.suggestions)) delete payload.suggestions[key];
+  }}
+  if (selectorErrorJsonSize(payload) <= MAX_SELECTOR_ERROR_ENVELOPE_BYTES) return payload;
+  if (isObject(payload.selector_inventory)) {{
+    payload.selector_inventory.sample = [];
+    payload.selector_inventory.discovery_command = '';
+    payload.selector_inventory.inventory_command = '';
+  }}
+  if (selectorErrorJsonSize(payload) <= MAX_SELECTOR_ERROR_ENVELOPE_BYTES) return payload;
+  payload.requested_selectors = [];
+  payload.unknown_selectors = [];
+  return payload;
+}}
+
+function selectorLimitError(reason, requestedSelectorCount, selectorRequestBytes, selectorIndex = null, selectorBytes = null) {{
   const error = {{
     reason,
     requested_selector_count: requestedSelectorCount,
+    selector_request_bytes: selectorRequestBytes,
     max_selectors: MAX_PROJECTION_SELECTORS,
-    max_selector_length: MAX_PROJECTION_SELECTOR_LENGTH
+    max_selector_bytes: MAX_PROJECTION_SELECTOR_BYTES,
+    max_selector_request_bytes: MAX_PROJECTION_SELECTOR_REQUEST_BYTES
   }};
   if (selectorIndex !== null) error.selector_index = selectorIndex;
-  if (selectorLength !== null) error.selector_length = selectorLength;
+  if (selectorBytes !== null) error.selector_bytes = selectorBytes;
   return error;
 }}
 
 function selectorTokensFromArray(value) {{
   const selectors = [];
   let requestedSelectorCount = 0;
+  let selectorRequestBytes = 0;
   for (const item of value) {{
     const token = String(item).trim();
     if (!token) continue;
+    const tokenBytes = utf8Size(token);
     requestedSelectorCount += 1;
     if (requestedSelectorCount > MAX_PROJECTION_SELECTORS) {{
-      return {{ selectors, error: selectorLimitError('too-many-selectors', requestedSelectorCount, requestedSelectorCount - 1) }};
+      return {{ selectors, error: selectorLimitError('too-many-selectors', requestedSelectorCount, selectorRequestBytes, requestedSelectorCount - 1) }};
     }}
-    if (token.length > MAX_PROJECTION_SELECTOR_LENGTH) {{
-      return {{ selectors, error: selectorLimitError('selector-too-long', requestedSelectorCount, requestedSelectorCount - 1, token.length) }};
+    if (tokenBytes > MAX_PROJECTION_SELECTOR_BYTES) {{
+      return {{ selectors, error: selectorLimitError('selector-too-long', requestedSelectorCount, selectorRequestBytes + tokenBytes, requestedSelectorCount - 1, tokenBytes) }};
     }}
+    if (selectorRequestBytes + tokenBytes > MAX_PROJECTION_SELECTOR_REQUEST_BYTES) {{
+      return {{ selectors, error: selectorLimitError('selector-request-too-large', requestedSelectorCount, selectorRequestBytes + tokenBytes, requestedSelectorCount - 1) }};
+    }}
+    selectorRequestBytes += tokenBytes;
     selectors.push(token);
   }}
   return {{ selectors, error: null }};
@@ -536,19 +579,31 @@ function selectorTokensFromArray(value) {{
 function selectorTokensFromString(value) {{
   const selectors = [];
   let requestedSelectorCount = 0;
+  let selectorRequestBytes = 0;
   let token = '';
+  let tokenBytes = 0;
   let pendingWhitespace = 0;
   let seenNonWhitespace = false;
   function appendSelector() {{
     if (!token) return null;
+    const appendedTokenBytes = tokenBytes;
     requestedSelectorCount += 1;
     if (requestedSelectorCount > MAX_PROJECTION_SELECTORS) {{
       token = '';
+      tokenBytes = 0;
       pendingWhitespace = 0;
-      return selectorLimitError('too-many-selectors', requestedSelectorCount, requestedSelectorCount - 1);
+      return selectorLimitError('too-many-selectors', requestedSelectorCount, selectorRequestBytes, requestedSelectorCount - 1);
     }}
+    if (selectorRequestBytes + appendedTokenBytes > MAX_PROJECTION_SELECTOR_REQUEST_BYTES) {{
+      token = '';
+      tokenBytes = 0;
+      pendingWhitespace = 0;
+      return selectorLimitError('selector-request-too-large', requestedSelectorCount, selectorRequestBytes + appendedTokenBytes, requestedSelectorCount - 1);
+    }}
+    selectorRequestBytes += appendedTokenBytes;
     selectors.push(token);
     token = '';
+    tokenBytes = 0;
     pendingWhitespace = 0;
     return null;
   }}
@@ -566,15 +621,17 @@ function selectorTokensFromString(value) {{
     }}
     if (pendingWhitespace) {{
       token += ' '.repeat(pendingWhitespace);
+      tokenBytes += pendingWhitespace;
       pendingWhitespace = 0;
     }}
     seenNonWhitespace = true;
     token += char;
-    if (token.length > MAX_PROJECTION_SELECTOR_LENGTH) {{
+    tokenBytes += utf8Size(char);
+    if (tokenBytes > MAX_PROJECTION_SELECTOR_BYTES) {{
       requestedSelectorCount += 1;
       return {{
         selectors,
-        error: selectorLimitError('selector-too-long', requestedSelectorCount, requestedSelectorCount - 1, token.length)
+        error: selectorLimitError('selector-too-long', requestedSelectorCount, selectorRequestBytes + tokenBytes, requestedSelectorCount - 1, tokenBytes)
       }};
     }}
   }}
@@ -591,6 +648,10 @@ function selectorInventorySummary(payload, sampleLimit = 8) {{
   const sample = [];
   function recordSample(path) {{
     if (sampleLimit <= 0) return;
+    const pathBytes = utf8Size(path);
+    if (pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES) return;
+    const sampleBytes = sample.reduce((total, item) => total + utf8Size(item), 0);
+    if (sampleBytes + pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_BYTES) return;
     sample.push(path);
     sample.sort();
     if (sample.length > sampleLimit) sample.pop();
@@ -621,9 +682,10 @@ function selectorInventorySummary(payload, sampleLimit = 8) {{
 
 function selectorValidationKind(selectedOutputKind) {{
   const kind = String(selectedOutputKind ?? '');
-  if (kind.includes('/selected-output/')) return kind.replace('/selected-output/', '/selector-validation-error/');
-  if (kind.endsWith('/selected-output')) return `${{kind.slice(0, -'/selected-output'.length)}}/selector-validation-error`;
-  return 'command-generation/selector-validation-error/v1';
+  let validationKind = 'command-generation/selector-validation-error/v1';
+  if (kind.includes('/selected-output/')) validationKind = kind.replace('/selected-output/', '/selector-validation-error/');
+  else if (kind.endsWith('/selected-output')) validationKind = `${{kind.slice(0, -'/selected-output'.length)}}/selector-validation-error`;
+  return utf8Size(validationKind) <= MAX_SELECTOR_ERROR_TEXT_BYTES ? validationKind : 'command-generation/selector-validation-error/v1';
 }}
 
 function selectorSuggestions(unknown, available, limit = 3) {{
@@ -644,10 +706,10 @@ function selectorValidationError(payload, selectors, missing, sourceCommand, sel
   const {{ count, sample: available }} = selectorInventorySummary(payload, sampleLimit);
   const suggestions = {{}};
   for (const selector of missing) suggestions[selector] = selectorSuggestions(selector, available, SELECTOR_SUGGESTION_LIMIT);
-  return {{
+  const error = {{
     kind: selectorValidationKind(selectedOutputKind),
     status: 'invalid-selector',
-    source_command: sourceCommand,
+    source_command: boundedSelectorErrorText(sourceCommand),
     requested_selectors: selectors,
     unknown_selectors: missing,
     selector_inventory: {{
@@ -655,24 +717,26 @@ function selectorValidationError(payload, selectors, missing, sourceCommand, sel
       available_count: count,
       sample: available,
       sample_limit: sampleLimit,
-      discovery_command: discoveryCommand,
-      inventory_command: detailCommand,
+      discovery_command: boundedSelectorErrorText(discoveryCommand),
+      inventory_command: boundedSelectorErrorText(detailCommand),
       rule: 'Full selector inventories are omitted from validation errors; use the inventory command for complete details.'
     }},
     suggestions,
     validation_rule: 'Selector requests are atomic: any unknown selector prevents partial projection output.'
   }};
+  return fitSelectorErrorEnvelope(error);
 }}
 
 function selectorRequestValidationError(selectors, requestError, sourceCommand, selectedOutputKind) {{
-  return {{
+  const error = {{
     kind: selectorValidationKind(selectedOutputKind),
     status: 'invalid-selector-request',
-    source_command: sourceCommand,
+    source_command: boundedSelectorErrorText(sourceCommand),
     requested_selectors: selectors,
     selector_request: {{ status: 'rejected', ...requestError }},
     validation_rule: 'Selector requests are bounded and atomic: too many selectors or overlong selectors are rejected before projection.'
   }};
+  return fitSelectorErrorEnvelope(error);
 }}
 
 function projectPayload(values, args) {{

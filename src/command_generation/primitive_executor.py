@@ -1113,9 +1113,14 @@ def _validate_resource_path(path: str) -> str:
 
 
 _MAX_PROJECTION_SELECTORS = 32
-_MAX_PROJECTION_SELECTOR_LENGTH = 256
+_MAX_PROJECTION_SELECTOR_BYTES = 256
+_MAX_PROJECTION_SELECTOR_REQUEST_BYTES = 512
+_MAX_SELECTOR_ERROR_TEXT_BYTES = 128
+_MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES = 96
+_MAX_SELECTOR_INVENTORY_SAMPLE_BYTES = 384
+_MAX_SELECTOR_ERROR_ENVELOPE_BYTES = 6_000
 _SELECTOR_INVENTORY_SAMPLE_LIMIT = 8
-_SELECTOR_SUGGESTION_LIMIT = 3
+_SELECTOR_SUGGESTION_LIMIT = 1
 
 
 def _project_payload(
@@ -1194,29 +1199,34 @@ def _projection_selector_limit_error(
     *,
     reason: str,
     requested_selector_count: int,
+    selector_request_bytes: int,
     selector_index: int | None = None,
-    selector_length: int | None = None,
+    selector_bytes: int | None = None,
 ) -> dict[str, Any]:
     error: dict[str, Any] = {
         "reason": reason,
         "requested_selector_count": requested_selector_count,
+        "selector_request_bytes": selector_request_bytes,
         "max_selectors": _MAX_PROJECTION_SELECTORS,
-        "max_selector_length": _MAX_PROJECTION_SELECTOR_LENGTH,
+        "max_selector_bytes": _MAX_PROJECTION_SELECTOR_BYTES,
+        "max_selector_request_bytes": _MAX_PROJECTION_SELECTOR_REQUEST_BYTES,
     }
     if selector_index is not None:
         error["selector_index"] = selector_index
-    if selector_length is not None:
-        error["selector_length"] = selector_length
+    if selector_bytes is not None:
+        error["selector_bytes"] = selector_bytes
     return error
 
 
 def _projection_selectors_from_sequence(raw_selectors: Sequence[Any]) -> dict[str, Any]:
     selectors: list[str] = []
     requested_selector_count = 0
+    selector_request_bytes = 0
     for item in raw_selectors:
         token = str(item).strip()
         if not token:
             continue
+        token_bytes = _utf8_size(token)
         requested_selector_count += 1
         if requested_selector_count > _MAX_PROJECTION_SELECTORS:
             return _projection_selector_result(
@@ -1224,19 +1234,35 @@ def _projection_selectors_from_sequence(raw_selectors: Sequence[Any]) -> dict[st
                 _projection_selector_limit_error(
                     reason="too-many-selectors",
                     requested_selector_count=requested_selector_count,
+                    selector_request_bytes=selector_request_bytes,
                     selector_index=requested_selector_count - 1,
                 ),
             )
-        if len(token) > _MAX_PROJECTION_SELECTOR_LENGTH:
+        if token_bytes > _MAX_PROJECTION_SELECTOR_BYTES:
             return _projection_selector_result(
                 selectors,
                 _projection_selector_limit_error(
                     reason="selector-too-long",
                     requested_selector_count=requested_selector_count,
+                    selector_request_bytes=selector_request_bytes + token_bytes,
                     selector_index=requested_selector_count - 1,
-                    selector_length=len(token),
+                    selector_bytes=token_bytes,
                 ),
             )
+        if (
+            selector_request_bytes + token_bytes
+            > _MAX_PROJECTION_SELECTOR_REQUEST_BYTES
+        ):
+            return _projection_selector_result(
+                selectors,
+                _projection_selector_limit_error(
+                    reason="selector-request-too-large",
+                    requested_selector_count=requested_selector_count,
+                    selector_request_bytes=selector_request_bytes + token_bytes,
+                    selector_index=requested_selector_count - 1,
+                ),
+            )
+        selector_request_bytes += token_bytes
         selectors.append(token)
     return _projection_selector_result(selectors)
 
@@ -1244,14 +1270,19 @@ def _projection_selectors_from_sequence(raw_selectors: Sequence[Any]) -> dict[st
 def _projection_selectors_from_string(raw_selectors: str) -> dict[str, Any]:
     selectors: list[str] = []
     requested_selector_count = 0
+    selector_request_bytes = 0
     token_chars: list[str] = []
+    token_bytes = 0
     pending_whitespace = 0
     seen_non_whitespace = False
 
     def append_selector() -> dict[str, Any] | None:
-        nonlocal requested_selector_count, token_chars, pending_whitespace
+        nonlocal requested_selector_count, selector_request_bytes, token_chars
+        nonlocal token_bytes, pending_whitespace
         token = "".join(token_chars)
         token_chars = []
+        appended_token_bytes = token_bytes
+        token_bytes = 0
         pending_whitespace = 0
         if not token:
             return None
@@ -1260,8 +1291,20 @@ def _projection_selectors_from_string(raw_selectors: str) -> dict[str, Any]:
             return _projection_selector_limit_error(
                 reason="too-many-selectors",
                 requested_selector_count=requested_selector_count,
+                selector_request_bytes=selector_request_bytes,
                 selector_index=requested_selector_count - 1,
             )
+        if (
+            selector_request_bytes + appended_token_bytes
+            > _MAX_PROJECTION_SELECTOR_REQUEST_BYTES
+        ):
+            return _projection_selector_limit_error(
+                reason="selector-request-too-large",
+                requested_selector_count=requested_selector_count,
+                selector_request_bytes=selector_request_bytes + appended_token_bytes,
+                selector_index=requested_selector_count - 1,
+            )
+        selector_request_bytes += appended_token_bytes
         selectors.append(token)
         return None
 
@@ -1279,18 +1322,21 @@ def _projection_selectors_from_string(raw_selectors: str) -> dict[str, Any]:
             continue
         if pending_whitespace:
             token_chars.extend(" " * pending_whitespace)
+            token_bytes += pending_whitespace
             pending_whitespace = 0
         seen_non_whitespace = True
         token_chars.append(char)
-        if len(token_chars) > _MAX_PROJECTION_SELECTOR_LENGTH:
+        token_bytes += _utf8_size(char)
+        if token_bytes > _MAX_PROJECTION_SELECTOR_BYTES:
             requested_selector_count += 1
             return _projection_selector_result(
                 selectors,
                 _projection_selector_limit_error(
                     reason="selector-too-long",
                     requested_selector_count=requested_selector_count,
+                    selector_request_bytes=selector_request_bytes + token_bytes,
                     selector_index=requested_selector_count - 1,
-                    selector_length=len(token_chars),
+                    selector_bytes=token_bytes,
                 ),
             )
     error = append_selector()
@@ -1299,12 +1345,48 @@ def _projection_selectors_from_string(raw_selectors: str) -> dict[str, Any]:
 
 def _selector_validation_kind(selected_output_kind: str) -> str:
     if "/selected-output/" in selected_output_kind:
-        return selected_output_kind.replace(
+        kind = selected_output_kind.replace(
             "/selected-output/", "/selector-validation-error/", 1
         )
-    if selected_output_kind.endswith("/selected-output"):
-        return f"{selected_output_kind.removesuffix('/selected-output')}/selector-validation-error"
+    elif selected_output_kind.endswith("/selected-output"):
+        kind = f"{selected_output_kind.removesuffix('/selected-output')}/selector-validation-error"
+    else:
+        kind = "command-generation/selector-validation-error/v1"
+    if _utf8_size(kind) <= _MAX_SELECTOR_ERROR_TEXT_BYTES:
+        return kind
     return "command-generation/selector-validation-error/v1"
+
+
+def _utf8_size(value: str) -> int:
+    return len(value.encode("utf-8"))
+
+
+def _bounded_selector_error_text(value: str) -> str:
+    return value if _utf8_size(value) <= _MAX_SELECTOR_ERROR_TEXT_BYTES else ""
+
+
+def _selector_error_json_size(payload: dict[str, Any]) -> int:
+    return _utf8_size(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+
+
+def _fit_selector_error_envelope(payload: dict[str, Any]) -> dict[str, Any]:
+    if _selector_error_json_size(payload) <= _MAX_SELECTOR_ERROR_ENVELOPE_BYTES:
+        return payload
+    suggestions = payload.get("suggestions")
+    if isinstance(suggestions, dict):
+        suggestions.clear()
+    if _selector_error_json_size(payload) <= _MAX_SELECTOR_ERROR_ENVELOPE_BYTES:
+        return payload
+    inventory = payload.get("selector_inventory")
+    if isinstance(inventory, dict):
+        inventory["sample"] = []
+        inventory["discovery_command"] = ""
+        inventory["inventory_command"] = ""
+    if _selector_error_json_size(payload) <= _MAX_SELECTOR_ERROR_ENVELOPE_BYTES:
+        return payload
+    payload["requested_selectors"] = []
+    payload["unknown_selectors"] = []
+    return payload
 
 
 def _selector_suggestions(
@@ -1337,10 +1419,10 @@ def _selector_validation_error(
     available_count, sample = _selector_inventory_summary(
         payload, sample_limit=sample_limit
     )
-    return {
+    error = {
         "kind": _selector_validation_kind(selected_output_kind),
         "status": "invalid-selector",
-        "source_command": source_command,
+        "source_command": _bounded_selector_error_text(source_command),
         "requested_selectors": selectors[:32],
         "unknown_selectors": missing[:32],
         "selector_inventory": {
@@ -1348,8 +1430,8 @@ def _selector_validation_error(
             "available_count": available_count,
             "sample": sample,
             "sample_limit": sample_limit,
-            "discovery_command": discovery_command,
-            "inventory_command": detail_command,
+            "discovery_command": _bounded_selector_error_text(discovery_command),
+            "inventory_command": _bounded_selector_error_text(detail_command),
             "rule": "Full selector inventories are omitted from validation errors; use the inventory command for complete details.",
         },
         "suggestions": {
@@ -1360,6 +1442,7 @@ def _selector_validation_error(
         },
         "validation_rule": "Selector requests are atomic: any unknown selector prevents partial projection output.",
     }
+    return _fit_selector_error_envelope(error)
 
 
 def _selector_request_validation_error(
@@ -1369,10 +1452,10 @@ def _selector_request_validation_error(
     source_command: str,
     selected_output_kind: str,
 ) -> dict[str, Any]:
-    return {
+    error = {
         "kind": _selector_validation_kind(selected_output_kind),
         "status": "invalid-selector-request",
-        "source_command": source_command,
+        "source_command": _bounded_selector_error_text(source_command),
         "requested_selectors": selectors,
         "selector_request": {
             "status": "rejected",
@@ -1380,6 +1463,7 @@ def _selector_request_validation_error(
         },
         "validation_rule": "Selector requests are bounded and atomic: too many selectors or overlong selectors are rejected before projection.",
     }
+    return _fit_selector_error_envelope(error)
 
 
 def _plain_output_result(result: Any) -> Any:
@@ -1654,6 +1738,13 @@ def _selector_inventory_summary(
 
     def record_sample(path: str) -> None:
         if sample_limit <= 0:
+            return
+        path_bytes = _utf8_size(path)
+        if path_bytes > _MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES:
+            return
+        if sum(_utf8_size(item) for item in sample) + path_bytes > (
+            _MAX_SELECTOR_INVENTORY_SAMPLE_BYTES
+        ):
             return
         sample.append(path)
         sample.sort()
