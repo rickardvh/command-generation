@@ -2649,7 +2649,9 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
     cast(list[object], operation_executor["initial_values"]).append(
         {"name": "select", "arg": "select", "default": None}
     )
+    near_budget_key = "n" * 94
     payload = {
+        **{str(index): {near_budget_key: index} for index in range(4, -1, -1)},
         "kind": "fixture/payload/v1",
         "summary": {"count": 2},
         "items": [{"name": "alpha"}, {"name": "beta"}],
@@ -2778,6 +2780,15 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
     assert len(cast(list[str], inventory["sample"])) <= cast(
         int, inventory["sample_limit"]
     )
+    assert inventory["sample"] == [
+        "0",
+        f"0.{near_budget_key}",
+        "1",
+        f"1.{near_budget_key}",
+        "2",
+        f"2.{near_budget_key}",
+        "3",
+    ]
     assert "values" not in invalid_selector_result
     assert compact_json_utf8_size(invalid_selector_result) < 6000
 

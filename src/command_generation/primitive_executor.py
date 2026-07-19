@@ -1734,7 +1734,7 @@ def _selector_inventory_summary(
     payload: Any, *, sample_limit: int
 ) -> tuple[int, list[str]]:
     count = 0
-    sample: list[str] = []
+    sample_candidates: list[str] = []
 
     def record_sample(path: str) -> None:
         if sample_limit <= 0:
@@ -1742,14 +1742,21 @@ def _selector_inventory_summary(
         path_bytes = _utf8_size(path)
         if path_bytes > _MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES:
             return
-        if sum(_utf8_size(item) for item in sample) + path_bytes > (
-            _MAX_SELECTOR_INVENTORY_SAMPLE_BYTES
-        ):
-            return
-        sample.append(path)
-        sample.sort()
-        if len(sample) > sample_limit:
-            sample.pop()
+        sample_candidates.append(path)
+        sample_candidates.sort()
+        if len(sample_candidates) > sample_limit:
+            sample_candidates.pop()
+
+    def budgeted_sample() -> list[str]:
+        sample: list[str] = []
+        sample_bytes = 0
+        for path in sample_candidates:
+            path_bytes = _utf8_size(path)
+            if sample_bytes + path_bytes > _MAX_SELECTOR_INVENTORY_SAMPLE_BYTES:
+                break
+            sample.append(path)
+            sample_bytes += path_bytes
+        return sample
 
     def visit(current: Any, prefix: str) -> None:
         nonlocal count
@@ -1768,7 +1775,7 @@ def _selector_inventory_summary(
             visit(value, path)
 
     visit(payload, "")
-    return count, sample
+    return count, budgeted_sample()
 
 
 def _resolve_inside(root: Path, relative: str) -> Path:

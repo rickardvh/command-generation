@@ -645,16 +645,25 @@ function selectorTokens(value) {{
 
 function selectorInventorySummary(payload, sampleLimit = 8) {{
   let count = 0;
-  const sample = [];
+  const sampleCandidates = [];
   function recordSample(path) {{
     if (sampleLimit <= 0) return;
     const pathBytes = utf8Size(path);
     if (pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES) return;
-    const sampleBytes = sample.reduce((total, item) => total + utf8Size(item), 0);
-    if (sampleBytes + pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_BYTES) return;
-    sample.push(path);
-    sample.sort();
-    if (sample.length > sampleLimit) sample.pop();
+    sampleCandidates.push(path);
+    sampleCandidates.sort();
+    if (sampleCandidates.length > sampleLimit) sampleCandidates.pop();
+  }}
+  function budgetedSample() {{
+    const sample = [];
+    let sampleBytes = 0;
+    for (const path of sampleCandidates) {{
+      const pathBytes = utf8Size(path);
+      if (sampleBytes + pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_BYTES) break;
+      sample.push(path);
+      sampleBytes += pathBytes;
+    }}
+    return sample;
   }}
   function visit(current, prefix) {{
     if (Array.isArray(current)) {{
@@ -677,7 +686,7 @@ function selectorInventorySummary(payload, sampleLimit = 8) {{
     }}
   }}
   visit(payload, '');
-  return {{ count, sample }};
+  return {{ count, sample: budgetedSample() }};
 }}
 
 function selectorValidationKind(selectedOutputKind) {{
