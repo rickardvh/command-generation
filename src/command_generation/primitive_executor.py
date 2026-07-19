@@ -1361,6 +1361,10 @@ def _utf8_size(value: str) -> int:
     return len(value.encode("utf-8"))
 
 
+def _utf8_sort_key(value: str) -> bytes:
+    return value.encode("utf-8")
+
+
 def _bounded_selector_error_text(value: str) -> str:
     return value if _utf8_size(value) <= _MAX_SELECTOR_ERROR_TEXT_BYTES else ""
 
@@ -1743,7 +1747,7 @@ def _selector_inventory_summary(
         if path_bytes > _MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES:
             return
         sample_candidates.append(path)
-        sample_candidates.sort()
+        sample_candidates.sort(key=_utf8_sort_key)
         if len(sample_candidates) > sample_limit:
             sample_candidates.pop()
 

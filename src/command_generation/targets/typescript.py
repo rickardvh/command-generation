@@ -512,6 +512,16 @@ function utf8Size(value) {{
   return new TextEncoder().encode(String(value)).length;
 }}
 
+function utf8Compare(left, right) {{
+  const leftBytes = new TextEncoder().encode(String(left));
+  const rightBytes = new TextEncoder().encode(String(right));
+  const length = Math.min(leftBytes.length, rightBytes.length);
+  for (let index = 0; index < length; index += 1) {{
+    if (leftBytes[index] !== rightBytes[index]) return leftBytes[index] - rightBytes[index];
+  }}
+  return leftBytes.length - rightBytes.length;
+}}
+
 function boundedSelectorErrorText(value) {{
   const text = String(value ?? '');
   return utf8Size(text) <= MAX_SELECTOR_ERROR_TEXT_BYTES ? text : '';
@@ -651,7 +661,7 @@ function selectorInventorySummary(payload, sampleLimit = 8) {{
     const pathBytes = utf8Size(path);
     if (pathBytes > MAX_SELECTOR_INVENTORY_SAMPLE_PATH_BYTES) return;
     sampleCandidates.push(path);
-    sampleCandidates.sort();
+    sampleCandidates.sort(utf8Compare);
     if (sampleCandidates.length > sampleLimit) sampleCandidates.pop();
   }}
   function budgetedSample() {{

@@ -2650,8 +2650,17 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
         {"name": "select", "arg": "select", "default": None}
     )
     near_budget_key = "n" * 94
+    bmp_boundary_key = "\ue000"
+    non_bmp_boundary_key = "\U00010000"
     payload = {
-        **{str(index): {near_budget_key: index} for index in range(4, -1, -1)},
+        **{
+            str(index): (
+                {bmp_boundary_key: "bmp", non_bmp_boundary_key: "non-bmp"}
+                if index == 3
+                else {near_budget_key: index}
+            )
+            for index in range(4, -1, -1)
+        },
         "kind": "fixture/payload/v1",
         "summary": {"count": 2},
         "items": [{"name": "alpha"}, {"name": "beta"}],
@@ -2788,6 +2797,7 @@ def test_generated_payload_project_contract_matches_interpreter_in_python_and_ty
         "2",
         f"2.{near_budget_key}",
         "3",
+        f"3.{bmp_boundary_key}",
     ]
     assert "values" not in invalid_selector_result
     assert compact_json_utf8_size(invalid_selector_result) < 6000
