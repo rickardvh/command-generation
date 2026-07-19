@@ -21,7 +21,9 @@ Host packages own the semantics:
 - payload construction;
 - selector names and command names;
 - view policy, ordering, labels, and text;
-- the complete selector inventory/detail command;
+- the exact selector inventory and detail commands, supplied as
+  `selector_inventory_command` and `selector_detail_command` when validation
+  errors need to point callers at discovery;
 - any user-facing interpretation of the projected values.
 
 The primitive intentionally does not evaluate expressions, execute embedded language snippets, infer selectors from prose, or encode host package vocabulary.

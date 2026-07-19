@@ -45,10 +45,15 @@ def _runtime_consumed_operation_outputs(
                 continue
             operation = json.loads(source.read_text(encoding="utf-8"))
             ir_plan = operation.get("ir_plan", {})
-            if not isinstance(ir_plan, dict) or ir_plan.get("status") not in {"representative", "complete"}:
+            if not isinstance(ir_plan, dict) or ir_plan.get("status") not in {
+                "representative",
+                "complete",
+            }:
                 continue
             emitted.add(operation_path)
-            outputs.append(GeneratedOutput(root / operation_path, _json_block(operation) + "\n"))
+            outputs.append(
+                GeneratedOutput(root / operation_path, _json_block(operation) + "\n")
+            )
     return outputs
 
 
@@ -64,15 +69,23 @@ def _python_resource_copy_outputs(
         generated_root = root / str(copy["generated_root"])
         required_marker = str(copy.get("required_marker") or "")
         if required_marker and not (source_root / required_marker).is_file():
-            raise FileNotFoundError(f"missing required resource marker: {(source_root / required_marker).as_posix()}")
+            raise FileNotFoundError(
+                f"missing required resource marker: {(source_root / required_marker).as_posix()}"
+            )
         for source in _resource_copy_source_files(source_root):
             relative = source.relative_to(source_root)
-            outputs.append(GeneratedOutput(generated_root / relative, source.read_text(encoding="utf-8")))
+            outputs.append(
+                GeneratedOutput(
+                    generated_root / relative, source.read_text(encoding="utf-8")
+                )
+            )
     return outputs
 
 
 def _module_name_for_operation(operation_id: str) -> str:
-    return "".join(character if character.isalnum() else "_" for character in operation_id).strip("_")
+    return "".join(
+        character if character.isalnum() else "_" for character in operation_id
+    ).strip("_")
 
 
 def _python_commands_package_module(
@@ -83,9 +96,14 @@ def _python_commands_package_module(
     regenerate_command: str,
 ) -> str:
     operation_executor = _operation_executor_binding(package)
-    operation_ids = {str(operation_id) for operation_id in operation_executor.get("supported_operation_ids", [])}
+    operation_ids = {
+        str(operation_id)
+        for operation_id in operation_executor.get("supported_operation_ids", [])
+    }
     direct_handlers = {
-        str(handler["operation_id"]): handler for handler in binding.get("runtime_module_handlers", []) if isinstance(handler, dict)
+        str(handler["operation_id"]): handler
+        for handler in binding.get("runtime_module_handlers", [])
+        if isinstance(handler, dict)
     }
     operation_ids.update(direct_handlers)
     imports = []
@@ -122,15 +140,21 @@ def _python_command_module(
 ) -> str:
     operation_executor = _operation_executor_binding(package)
     direct_handlers = {
-        str(handler["operation_id"]): handler for handler in binding.get("runtime_module_handlers", []) if isinstance(handler, dict)
+        str(handler["operation_id"]): handler
+        for handler in binding.get("runtime_module_handlers", [])
+        if isinstance(handler, dict)
     }
     if operation_id in direct_handlers:
         handler = direct_handlers[operation_id]
         if handler.get("handler") == "module_front_door":
             runtime_module_file = _runtime_module_file_for_package(package)
             if runtime_module_file == "cli":
-                rendered_handler = _render_module_front_door_runtime_handler("run", handler)
-                run_body = rendered_handler.split("def run(args: argparse.Namespace) -> int:\n", 1)[1]
+                rendered_handler = _render_module_front_door_runtime_handler(
+                    "run", handler
+                )
+                run_body = rendered_handler.split(
+                    "def run(args: argparse.Namespace) -> int:\n", 1
+                )[1]
                 support_imports = "import contextlib\nimport io\nimport json\nfrom ..cli import build_generated_parser\n"
             else:
                 run_body = f"    from ..{runtime_module_file} import _run_generated_operation\n\n    return _run_generated_operation({operation_id!r}, args)\n"
@@ -138,14 +162,20 @@ def _python_command_module(
         elif handler.get("handler") == "argparse_function_call":
             runtime_module_file = _runtime_module_file_for_package(package)
             if runtime_module_file == "cli":
-                rendered_handler = _render_argparse_function_call_handler("run", handler)
-                run_body = rendered_handler.split("def run(args: argparse.Namespace) -> int:\n", 1)[1]
+                rendered_handler = _render_argparse_function_call_handler(
+                    "run", handler
+                )
+                run_body = rendered_handler.split(
+                    "def run(args: argparse.Namespace) -> int:\n", 1
+                )[1]
             else:
                 run_body = f"    from ..{runtime_module_file} import _run_generated_operation\n\n    return _run_generated_operation({operation_id!r}, args)\n"
             support_imports = ""
         else:
             import_module = str(handler["import_module"])
-            imported_function = str(handler.get("function") or _runtime_adapter_function_name(operation_id))
+            imported_function = str(
+                handler.get("function") or _runtime_adapter_function_name(operation_id)
+            )
             local_binding = _local_runtime_binding_for_import(package, import_module)
             if local_binding is not None:
                 local_import = _command_module_import_for_binding(local_binding)
@@ -158,7 +188,9 @@ def _python_command_module(
             "def invoke(_values: Mapping[str, Any]) -> object:\n"
             f"    raise RuntimeError({operation_id!r} + ' has no generated operation callable')\n"
         )
-        typing_import = "from typing import Any\nfrom collections.abc import Mapping\n\n"
+        typing_import = (
+            "from typing import Any\nfrom collections.abc import Mapping\n\n"
+        )
     else:
         run_body = f"    return run_operation_ir(generated_operation_contract({operation_id!r}), args)\n"
         invoke_function = (
@@ -166,9 +198,13 @@ def _python_command_module(
             "def invoke(values: Mapping[str, Any]) -> object:\n"
             f"    return run_operation_callable(generated_operation_contract({operation_id!r}), values)\n"
         )
-        executor_module = str(operation_executor.get("module_file", "operation_executor"))
+        executor_module = str(
+            operation_executor.get("module_file", "operation_executor")
+        )
         support_imports = f"from ..cli import generated_operation_contract\nfrom ..{executor_module} import run_operation_callable, run_operation_ir\n"
-        typing_import = "from collections.abc import Mapping\nfrom typing import Any\n\n"
+        typing_import = (
+            "from collections.abc import Mapping\nfrom typing import Any\n\n"
+        )
     return (
         '"""Generated executable command projection.\n\n'
         f"Source: {source_path}\n"
@@ -196,21 +232,37 @@ def _python_command_module_outputs(
     regenerate_command: str,
 ) -> list[GeneratedOutput]:
     operation_executor = _operation_executor_binding(package)
-    operation_ids = {str(operation_id) for operation_id in operation_executor.get("supported_operation_ids", [])}
+    operation_ids = {
+        str(operation_id)
+        for operation_id in operation_executor.get("supported_operation_ids", [])
+    }
     operation_ids.update(
-        str(handler["operation_id"]) for handler in binding.get("runtime_module_handlers", []) if isinstance(handler, dict)
+        str(handler["operation_id"])
+        for handler in binding.get("runtime_module_handlers", [])
+        if isinstance(handler, dict)
     )
     outputs = [
         GeneratedOutput(
             root / "commands" / "__init__.py",
-            _python_commands_package_module(package, binding, source_path=source_path, regenerate_command=regenerate_command),
+            _python_commands_package_module(
+                package,
+                binding,
+                source_path=source_path,
+                regenerate_command=regenerate_command,
+            ),
         )
     ]
     for operation_id in sorted(operation_ids):
         outputs.append(
             GeneratedOutput(
                 root / "commands" / f"{_module_name_for_operation(operation_id)}.py",
-                _python_command_module(package, operation_id, binding, source_path=source_path, regenerate_command=regenerate_command),
+                _python_command_module(
+                    package,
+                    operation_id,
+                    binding,
+                    source_path=source_path,
+                    regenerate_command=regenerate_command,
+                ),
             )
         )
     return outputs
@@ -246,7 +298,11 @@ def _host_support_label(
     if host_manifest.generated_root is None:
         return support_path.name
     try:
-        return support_path.resolve().relative_to(host_manifest.generated_root.resolve().parent).as_posix()
+        return (
+            support_path.resolve()
+            .relative_to(host_manifest.generated_root.resolve().parent)
+            .as_posix()
+        )
     except ValueError:
         return support_path.name
 
@@ -262,7 +318,10 @@ def _python_primitive_executor_module(
     support_label = "none"
     support_import = ""
     if host_manifest.python_primitive_support_path is not None:
-        support_label = _host_support_label(host_manifest=host_manifest, support_path=host_manifest.python_primitive_support_path)
+        support_label = _host_support_label(
+            host_manifest=host_manifest,
+            support_path=host_manifest.python_primitive_support_path,
+        )
         support_import = (
             "\n\n"
             "from .host_primitive_support import execute_host_primitive as _execute_configured_host_primitive\n\n"
@@ -291,7 +350,10 @@ def _python_host_primitive_support_module(
 ) -> str:
     if host_manifest.python_primitive_support_path is None:
         return ""
-    support_label = _host_support_label(host_manifest=host_manifest, support_path=host_manifest.python_primitive_support_path)
+    support_label = _host_support_label(
+        host_manifest=host_manifest,
+        support_path=host_manifest.python_primitive_support_path,
+    )
     support = host_manifest.python_primitive_support_path.read_text(encoding="utf-8")
     return (
         '"""Generated target-local host primitive support module.\n\n'
@@ -306,8 +368,12 @@ def _python_host_primitive_support_module(
     )
 
 
-def _python_operation_composition_module(*, source_path: str, regenerate_command: str) -> str:
-    operation_composition_path = Path(__file__).parent.parent / "operation_composition.py"
+def _python_operation_composition_module(
+    *, source_path: str, regenerate_command: str
+) -> str:
+    operation_composition_path = (
+        Path(__file__).parent.parent / "operation_composition.py"
+    )
     operation_composition = operation_composition_path.read_text(encoding="utf-8")
     return (
         '"""Generated target-local operation composition helpers.\n\n'
@@ -321,7 +387,9 @@ def _python_operation_composition_module(*, source_path: str, regenerate_command
     )
 
 
-def _python_resource_primitives_module(*, source_path: str, regenerate_command: str) -> str:
+def _python_resource_primitives_module(
+    *, source_path: str, regenerate_command: str
+) -> str:
     return (
         '"""Generated target-local resource and output primitives.\n\n'
         f"Source: {source_path}\n"
@@ -531,7 +599,9 @@ def _python_resource_primitives_module(*, source_path: str, regenerate_command: 
 
 
 def _handler_function_name(primitive: str) -> str:
-    return "_handle_" + "".join(character if character.isalnum() else "_" for character in primitive)
+    return "_handle_" + "".join(
+        character if character.isalnum() else "_" for character in primitive
+    )
 
 
 def _render_value_kwargs(kwargs: dict[str, Any]) -> str:
@@ -543,7 +613,9 @@ def _render_value_kwargs(kwargs: dict[str, Any]) -> str:
     return ", ".join(rendered)
 
 
-def _handler_import_module(package: dict[str, Any], import_module: str, *, operation_executor: bool) -> str:
+def _handler_import_module(
+    package: dict[str, Any], import_module: str, *, operation_executor: bool
+) -> str:
     local_binding = _local_runtime_binding_for_import(package, import_module)
     if local_binding is None:
         return import_module
@@ -552,10 +624,14 @@ def _handler_import_module(package: dict[str, Any], import_module: str, *, opera
     return _command_module_import_for_binding(local_binding)
 
 
-def _render_function_call_handler(package: dict[str, Any], function_name: str, handler: dict[str, Any]) -> str:
+def _render_function_call_handler(
+    package: dict[str, Any], function_name: str, handler: dict[str, Any]
+) -> str:
     imported_name = str(handler["function"])
     kwargs = _render_value_kwargs(handler.get("kwargs", {}))
-    import_module = _handler_import_module(package, str(handler["import_module"]), operation_executor=True)
+    import_module = _handler_import_module(
+        package, str(handler["import_module"]), operation_executor=True
+    )
     return (
         f"def {function_name}(values: dict[str, Any], _arguments: dict[str, Any], _context: PrimitiveContext) -> Any:\n"
         f"    from {import_module} import {imported_name}\n\n"
@@ -563,7 +639,9 @@ def _render_function_call_handler(package: dict[str, Any], function_name: str, h
     )
 
 
-def _render_conditional_function_call_handler(package: dict[str, Any], function_name: str, handler: dict[str, Any]) -> str:
+def _render_conditional_function_call_handler(
+    package: dict[str, Any], function_name: str, handler: dict[str, Any]
+) -> str:
     condition_value = str(handler["condition_value"])
     true_handler = handler["if_true"]
     false_handler = handler["if_false"]
@@ -571,8 +649,12 @@ def _render_conditional_function_call_handler(package: dict[str, Any], function_
     false_name = str(false_handler["function"])
     true_kwargs = _render_value_kwargs(true_handler.get("kwargs", {}))
     false_kwargs = _render_value_kwargs(false_handler.get("kwargs", {}))
-    true_import_module = _handler_import_module(package, str(true_handler["import_module"]), operation_executor=True)
-    false_import_module = _handler_import_module(package, str(false_handler["import_module"]), operation_executor=True)
+    true_import_module = _handler_import_module(
+        package, str(true_handler["import_module"]), operation_executor=True
+    )
+    false_import_module = _handler_import_module(
+        package, str(false_handler["import_module"]), operation_executor=True
+    )
     return (
         f"def {function_name}(values: dict[str, Any], _arguments: dict[str, Any], _context: PrimitiveContext) -> Any:\n"
         f"    if values.get({condition_value!r}):\n"
@@ -583,7 +665,9 @@ def _render_conditional_function_call_handler(package: dict[str, Any], function_
     )
 
 
-def _render_generated_target_root_handler(function_name: str, handler: dict[str, Any]) -> str:
+def _render_generated_target_root_handler(
+    function_name: str, handler: dict[str, Any]
+) -> str:
     project_markers = tuple(str(marker) for marker in handler["project_markers"])
     return (
         f"def {function_name}(values: dict[str, Any], _arguments: dict[str, Any], _context: PrimitiveContext) -> Any:\n"
@@ -592,7 +676,9 @@ def _render_generated_target_root_handler(function_name: str, handler: dict[str,
     )
 
 
-def _render_runtime_emit_handler(function_name: str, handler: dict[str, Any], *, runtime_module_file: str) -> str:
+def _render_runtime_emit_handler(
+    function_name: str, handler: dict[str, Any], *, runtime_module_file: str
+) -> str:
     runtime_function = str(handler["runtime_function"])
     result_value = str(handler["result_value"])
     format_value = str(handler["format_value"])
@@ -649,7 +735,9 @@ def _render_runtime_handler(
     )
 
 
-def _local_runtime_binding_functions(package: dict[str, Any], binding: dict[str, Any]) -> list[str]:
+def _local_runtime_binding_functions(
+    package: dict[str, Any], binding: dict[str, Any]
+) -> list[str]:
     source_import_module = str(binding["source_import_module"])
     functions: set[str] = set()
 
@@ -668,18 +756,35 @@ def _local_runtime_binding_functions(package: dict[str, Any], binding: dict[str,
     python_runtime_binding = package.get("python_runtime_binding", {})
     if isinstance(python_runtime_binding, dict):
         for handler in python_runtime_binding.get("runtime_module_handlers", []):
-            if isinstance(handler, dict) and handler.get("handler") in {"module_front_door", "argparse_function_call"}:
+            if isinstance(handler, dict) and handler.get("handler") in {
+                "module_front_door",
+                "argparse_function_call",
+            }:
                 continue
-            if isinstance(handler, dict) and handler.get("import_module") == source_import_module:
-                functions.add(str(handler.get("function") or _runtime_adapter_function_name(str(handler["operation_id"]))))
+            if (
+                isinstance(handler, dict)
+                and handler.get("import_module") == source_import_module
+            ):
+                functions.add(
+                    str(
+                        handler.get("function")
+                        or _runtime_adapter_function_name(str(handler["operation_id"]))
+                    )
+                )
     return sorted(functions)
 
 
-def _local_runtime_generated_overrides(binding: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _local_runtime_generated_overrides(
+    binding: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
     overrides = binding.get("generated_function_overrides", [])
     if not isinstance(overrides, list):
         return {}
-    return {str(item["function"]): item for item in overrides if isinstance(item, dict) and item.get("function")}
+    return {
+        str(item["function"]): item
+        for item in overrides
+        if isinstance(item, dict) and item.get("function")
+    }
 
 
 def _python_local_runtime_helper_block() -> str:
@@ -692,7 +797,7 @@ def _python_local_runtime_helper_block() -> str:
         "    if isinstance(value, list):\n"
         "        return [_serialise_value(item) for item in value]\n"
         "    return value\n\n\n"
-        "def _field_by_path(payload: Any, path: str) -> tuple[bool, Any]:\n"
+        "def _field_by_path(payload: Any, path: str, *, copy_value: bool = True) -> tuple[bool, Any]:\n"
         "    current = payload\n"
         "    for part in path.split('.'):\n"
         "        if isinstance(current, dict) and part in current:\n"
@@ -705,7 +810,7 @@ def _python_local_runtime_helper_block() -> str:
         "            except (ValueError, IndexError):\n"
         "                return (False, None)\n"
         "        return (False, None)\n"
-        "    return (True, copy.deepcopy(current))\n\n\n"
+        "    return (True, copy.deepcopy(current) if copy_value else None)\n\n\n"
         "def _selector_tokens(select: str | None) -> list[str]:\n"
         "    return [token.strip() for token in str(select or '').split(',') if token.strip()]\n\n\n"
         "def _available_selectors_for_payload(payload: Any, prefix: str = '') -> list[str]:\n"
@@ -721,6 +826,25 @@ def _python_local_runtime_helper_block() -> str:
         "            selectors.append(path)\n"
         "            selectors.extend(_available_selectors_for_payload(item, path))\n"
         "    return selectors\n\n\n"
+        "def _selector_inventory_summary(payload: Any, sample_limit: int = 8) -> tuple[int, list[str]]:\n"
+        "    count = 0\n"
+        "    sample: list[str] = []\n"
+        "    pending: list[tuple[Any, str]] = [(payload, '')]\n"
+        "    while pending:\n"
+        "        current, prefix = pending.pop()\n"
+        "        if isinstance(current, dict):\n"
+        "            entries = sorted(((str(key), value) for key, value in current.items()), reverse=True)\n"
+        "        elif isinstance(current, list):\n"
+        "            entries = [(str(index), value) for index, value in reversed(list(enumerate(current)))]\n"
+        "        else:\n"
+        "            continue\n"
+        "        for key, value in entries:\n"
+        "            path = f'{prefix}.{key}' if prefix else key\n"
+        "            count += 1\n"
+        "            if len(sample) < sample_limit:\n"
+        "                sample.append(path)\n"
+        "            pending.append((value, path))\n"
+        "    return count, sample\n\n\n"
         "def _selector_validation_kind(selected_output_kind: str) -> str:\n"
         "    if '/selected-output/' in selected_output_kind:\n"
         "        return selected_output_kind.replace('/selected-output/', '/selector-validation-error/')\n"
@@ -738,7 +862,7 @@ def _python_local_runtime_helper_block() -> str:
         "            return matches\n"
         "    return available[:limit]\n\n\n"
         "def _selector_validation_error(*, payload: Any, selectors: list[str], missing: list[str], source_command: str, selected_output_kind: str) -> dict[str, Any]:\n"
-        "    available = _available_selectors_for_payload(payload)\n"
+        "    available_count, available = _selector_inventory_summary(payload)\n"
         "    sample_limit = 8\n"
         "    command_ref = source_command or '<command>'\n"
         "    return {\n"
@@ -749,11 +873,11 @@ def _python_local_runtime_helper_block() -> str:
         "        'unknown_selectors': missing,\n"
         "        'selector_inventory': {\n"
         "            'status': 'omitted-from-validation-error',\n"
-        "            'available_count': len(available),\n"
+        "            'available_count': available_count,\n"
         "            'sample': available[:sample_limit],\n"
         "            'sample_limit': sample_limit,\n"
-        "            'discovery_command': f'{command_ref} --select <field[,field...]> --format json',\n"
-        "            'inventory_command': f'{command_ref} --verbose --format json',\n"
+        "            'discovery_command': '',\n"
+        "            'inventory_command': '',\n"
         "            'rule': 'Full selector inventories are omitted from validation errors; use the inventory command for complete details.',\n"
         "        },\n"
         "        'suggestions': {selector: _selector_suggestions(selector, available) for selector in missing},\n"
@@ -763,14 +887,15 @@ def _python_local_runtime_helper_block() -> str:
         "    values: dict[str, Any] = {}\n"
         "    missing: list[str] = []\n"
         "    selectors = _selector_tokens(select)\n"
+        "    missing = [selector for selector in selectors if not _field_by_path(payload, selector, copy_value=False)[0]]\n"
+        "    if missing:\n"
+        "        return _selector_validation_error(payload=payload, selectors=selectors, missing=missing, source_command=source_command, selected_output_kind=selected_output_kind)\n"
         "    for selector in selectors:\n"
         "        found, value = _field_by_path(payload, selector)\n"
         "        if found:\n"
         "            values[selector] = value\n"
         "        else:\n"
         "            missing.append(selector)\n"
-        "    if missing:\n"
-        "        return _selector_validation_error(payload=payload, selectors=selectors, missing=missing, source_command=source_command, selected_output_kind=selected_output_kind)\n"
         "    selected: dict[str, Any] = {'kind': selected_output_kind, 'source_command': source_command, 'values': values}\n"
         "    return selected\n\n\n"
         "def _selector_refs(*, command: str, answer: Any, compact_profile_ref: str = '') -> list[str]:\n"
@@ -879,13 +1004,29 @@ def _python_local_runtime_generated_function(
     if implementation == "sectioned_payload_select":
         payload_value = str(override.get("payload_value") or "payload")
         source_command = str(override.get("source_command") or "command")
-        common_sections = [str(section) for section in override.get("common_sections", [])]
-        selected_output_kind = str(override.get("selected_output_kind") or "command-generation/selected-output/v1")
-        sectioned_payload_kind = str(override.get("sectioned_payload_kind") or "command-generation/sectioned-resource/v1")
+        common_sections = [
+            str(section) for section in override.get("common_sections", [])
+        ]
+        selected_output_kind = str(
+            override.get("selected_output_kind")
+            or "command-generation/selected-output/v1"
+        )
+        sectioned_payload_kind = str(
+            override.get("sectioned_payload_kind")
+            or "command-generation/sectioned-resource/v1"
+        )
         compact_profile_ref = str(override.get("compact_profile_ref") or "")
-        section_command_ref = str(override.get("section_command_ref") or f"{source_command} --format json")
-        section_detail_command = str(override.get("section_detail_command") or f"{source_command} --section <section> --format json")
-        full_detail_command = str(override.get("full_detail_command") or f"{source_command} --verbose --format json")
+        section_command_ref = str(
+            override.get("section_command_ref") or f"{source_command} --format json"
+        )
+        section_detail_command = str(
+            override.get("section_detail_command")
+            or f"{source_command} --section <section> --format json"
+        )
+        full_detail_command = str(
+            override.get("full_detail_command")
+            or f"{source_command} --verbose --format json"
+        )
         return (
             f"def {function}(values: dict[str, Any], _arguments: dict[str, Any], _context: Any) -> dict[str, Any]:\n"
             f"    payload = values[{payload_value!r}]\n"
@@ -910,8 +1051,14 @@ def _python_local_runtime_generated_function(
             f"    return read_json_object(resource_root, {relative_path!r})\n"
         )
     if implementation == "json_output_with_source_fallback":
-        selected_output_kind = str(override.get("selected_output_kind") or "command-generation/selected-output/v1")
-        sectioned_payload_kind = str(override.get("sectioned_payload_kind") or "command-generation/sectioned-resource/v1")
+        selected_output_kind = str(
+            override.get("selected_output_kind")
+            or "command-generation/selected-output/v1"
+        )
+        sectioned_payload_kind = str(
+            override.get("sectioned_payload_kind")
+            or "command-generation/sectioned-resource/v1"
+        )
         delegation_outcomes_kind = str(override.get("delegation_outcomes_kind") or "")
         return (
             f"def {function}(values: dict[str, Any], arguments: dict[str, Any], context: Any) -> Any:\n"
@@ -945,7 +1092,9 @@ def _python_local_runtime_generated_function(
             f"    from {source_import_module} import {function} as source_function\n\n"
             "    return source_function(values, arguments, context)\n"
         )
-    raise ValueError(f"unsupported generated local runtime implementation: {implementation!r}")
+    raise ValueError(
+        f"unsupported generated local runtime implementation: {implementation!r}"
+    )
 
 
 def _python_local_runtime_binding_module(
@@ -963,7 +1112,11 @@ def _python_local_runtime_binding_module(
     for function in functions:
         if function in overrides:
             function_blocks.append(
-                _python_local_runtime_generated_function(function, overrides[function], source_import_module=source_import_module)
+                _python_local_runtime_generated_function(
+                    function,
+                    overrides[function],
+                    source_import_module=source_import_module,
+                )
             )
         else:
             function_blocks.append(
@@ -992,7 +1145,10 @@ def _python_local_runtime_binding_module(
         "# Export semantics: generated wrappers perform live source-module lookup at call time.\n"
         "# Monkeypatching this facade is local to the facade; it is not forwarded back into source modules.\n"
         "# Replace individual bindings here with generated/codegen-owned primitives as those operations migrate.\n"
-        f"# Regenerate with: {regenerate_command}\n\n" + helper_block + "\n\n".join(function_blocks) + "\n\n"
+        f"# Regenerate with: {regenerate_command}\n\n"
+        + helper_block
+        + "\n\n".join(function_blocks)
+        + "\n\n"
         "__all__ = [\n"
         f"    {exported},\n"
         "]\n"
@@ -1021,11 +1177,15 @@ def _python_operation_executor_module(
     regenerate_command: str,
 ) -> str:
     runtime_module_file = _runtime_module_file_for_package(package)
-    supported_operation_ids = sorted(str(operation_id) for operation_id in binding["supported_operation_ids"])
+    supported_operation_ids = sorted(
+        str(operation_id) for operation_id in binding["supported_operation_ids"]
+    )
     initial_values = []
     callable_initial_values = []
     for item in binding["initial_values"]:
-        initial_values.append(f"                {str(item['name'])!r}: getattr(args, {str(item['arg'])!r}, {item.get('default')!r}),")
+        initial_values.append(
+            f"                {str(item['name'])!r}: getattr(args, {str(item['arg'])!r}, {item.get('default')!r}),"
+        )
         callable_initial_values.append(
             f"                {str(item['name'])!r}: values.get({str(item['name'])!r}, {item.get('default')!r}),"
         )
@@ -1038,25 +1198,50 @@ def _python_operation_executor_module(
         handler_items.append(f"                {primitive!r}: {function_name},")
         handler_kind = str(handler["handler"])
         if handler_kind == "runtime_handler":
-            handlers.append(_render_runtime_handler(package, function_name, handler, runtime_module_file=runtime_module_file))
+            handlers.append(
+                _render_runtime_handler(
+                    package,
+                    function_name,
+                    handler,
+                    runtime_module_file=runtime_module_file,
+                )
+            )
         elif handler_kind == "function_call":
-            handlers.append(_render_function_call_handler(package, function_name, handler))
+            handlers.append(
+                _render_function_call_handler(package, function_name, handler)
+            )
         elif handler_kind == "conditional_function_call":
-            handlers.append(_render_conditional_function_call_handler(package, function_name, handler))
+            handlers.append(
+                _render_conditional_function_call_handler(
+                    package, function_name, handler
+                )
+            )
         elif handler_kind == "generated_target_root_resolve":
-            handlers.append(_render_generated_target_root_handler(function_name, handler))
+            handlers.append(
+                _render_generated_target_root_handler(function_name, handler)
+            )
         elif handler_kind == "runtime_emit":
             needs_json = True
-            handlers.append(_render_runtime_emit_handler(function_name, handler, runtime_module_file=runtime_module_file))
+            handlers.append(
+                _render_runtime_emit_handler(
+                    function_name, handler, runtime_module_file=runtime_module_file
+                )
+            )
         else:
-            raise ValueError(f"unsupported Python operation executor handler: {handler_kind!r}")
-    supported_set = ",\n        ".join(repr(operation_id) for operation_id in supported_operation_ids)
+            raise ValueError(
+                f"unsupported Python operation executor handler: {handler_kind!r}"
+            )
+    supported_set = ",\n        ".join(
+        repr(operation_id) for operation_id in supported_operation_ids
+    )
     root_functions = []
     context_roots = []
     for root in binding.get("context_roots", []):
         root_function = _handler_function_name(f"context.root.{root['name']}")
         root_functions.append(_render_context_root_function(root))
-        context_roots.append(f"                {str(root['name'])!r}: {root_function}(),")
+        context_roots.append(
+            f"                {str(root['name'])!r}: {root_function}(),"
+        )
     roots_block = "\n".join(context_roots)
     if roots_block:
         roots_block = "\n" + roots_block + "\n            "
@@ -1090,7 +1275,9 @@ def _python_operation_executor_module(
         "    values = run_operation_values(\n"
         "        operation,\n"
         "        initial_values={\n"
-        '            "operation_id": operation.get("id"),\n' + "\n".join(initial_values) + "\n"
+        '            "operation_id": operation.get("id"),\n'
+        + "\n".join(initial_values)
+        + "\n"
         "        },\n"
         "    )\n"
         "    emitted = values.get('emitted')\n"
@@ -1102,7 +1289,9 @@ def _python_operation_executor_module(
         "        result = run_operation_values(\n"
         "            operation,\n"
         "            initial_values={\n"
-        '                "operation_id": operation.get("id"),\n' + "\n".join(callable_initial_values) + "\n"
+        '                "operation_id": operation.get("id"),\n'
+        + "\n".join(callable_initial_values)
+        + "\n"
         "            },\n"
         "        ).get('result')\n"
         "    return result\n\n\n"
@@ -1128,19 +1317,41 @@ def _python_operation_executor_module(
 
 
 def _runtime_adapter_function_name(operation_id: str) -> str:
-    return "_run_" + "".join(character if character.isalnum() else "_" for character in operation_id) + "_adapter"
+    return (
+        "_run_"
+        + "".join(
+            character if character.isalnum() else "_" for character in operation_id
+        )
+        + "_adapter"
+    )
 
 
-def _render_argparse_function_call_handler(function_name: str, handler: dict[str, Any]) -> str:
+def _render_argparse_function_call_handler(
+    function_name: str, handler: dict[str, Any]
+) -> str:
     import_module = str(handler["import_module"])
     imported_function = str(handler["function"])
     support_import_module = str(handler.get("support_import_module") or import_module)
     result_mode = str(handler.get("result", "return_zero"))
     emit_payload = handler.get("emit_payload", {})
-    emit_import_module = str(emit_payload.get("import_module") or support_import_module) if isinstance(emit_payload, dict) else ""
-    emit_function = str(emit_payload.get("function") or "_emit_payload") if isinstance(emit_payload, dict) else "_emit_payload"
-    emit_format_attr = str(emit_payload.get("format_attr") or "format") if isinstance(emit_payload, dict) else "format"
-    argument_specs = [spec for spec in handler.get("arguments", []) if isinstance(spec, dict)]
+    emit_import_module = (
+        str(emit_payload.get("import_module") or support_import_module)
+        if isinstance(emit_payload, dict)
+        else ""
+    )
+    emit_function = (
+        str(emit_payload.get("function") or "_emit_payload")
+        if isinstance(emit_payload, dict)
+        else "_emit_payload"
+    )
+    emit_format_attr = (
+        str(emit_payload.get("format_attr") or "format")
+        if isinstance(emit_payload, dict)
+        else "format"
+    )
+    argument_specs = [
+        spec for spec in handler.get("arguments", []) if isinstance(spec, dict)
+    ]
     lines = [f"def {function_name}(args: argparse.Namespace) -> int:"]
     kwargs: list[str] = []
     needs_support: set[str] = set()
@@ -1157,7 +1368,9 @@ def _render_argparse_function_call_handler(function_name: str, handler: dict[str
             lines.append(f"    {variable_name} = bool(getattr(args, {attr!r}, False))")
         elif kind == "list_attr":
             attr = str(spec["attr"])
-            lines.append(f"    {variable_name} = list(getattr(args, {attr!r}, []) or [])")
+            lines.append(
+                f"    {variable_name} = list(getattr(args, {attr!r}, []) or [])"
+            )
         elif kind == "target_root":
             attr = str(spec.get("attr") or "target")
             default_current = bool(spec.get("default_current", True))
@@ -1167,29 +1380,45 @@ def _render_argparse_function_call_handler(function_name: str, handler: dict[str
             if validate_command:
                 needs_support.add("_validate_target_root")
             if default_current:
-                lines.append(f"    {variable_name} = _resolve_target_root(getattr(args, {attr!r}, None))")
+                lines.append(
+                    f"    {variable_name} = _resolve_target_root(getattr(args, {attr!r}, None))"
+                )
             else:
-                lines.append(f"    {variable_name} = _resolve_target_root(getattr(args, {attr!r}, None)) if getattr(args, {attr!r}, None) else None")
+                lines.append(
+                    f"    {variable_name} = _resolve_target_root(getattr(args, {attr!r}, None)) if getattr(args, {attr!r}, None) else None"
+                )
             if not allow_none:
                 lines.append(f"    if {variable_name} is None:")
-                lines.append("        raise ValueError('target root resolution returned None')")
+                lines.append(
+                    "        raise ValueError('target root resolution returned None')"
+                )
             if validate_command:
                 if allow_none:
                     lines.append(f"    if {variable_name} is not None:")
-                    lines.append(f"        _validate_target_root(command_name={validate_command!r}, target_root={variable_name})")
+                    lines.append(
+                        f"        _validate_target_root(command_name={validate_command!r}, target_root={variable_name})"
+                    )
                 else:
-                    lines.append(f"    _validate_target_root(command_name={validate_command!r}, target_root={variable_name})")
+                    lines.append(
+                        f"    _validate_target_root(command_name={validate_command!r}, target_root={variable_name})"
+                    )
         elif kind == "diagnostic_profile":
             default = str(spec.get("default") or "tiny")
             needs_support.add("_diagnostic_profile")
-            lines.append(f"    {variable_name} = _diagnostic_profile(args, default={default!r})")
+            lines.append(
+                f"    {variable_name} = _diagnostic_profile(args, default={default!r})"
+            )
         elif kind == "module_descriptors":
-            needs_support.update({"_module_operations", "_validate_descriptor_contract"})
+            needs_support.update(
+                {"_module_operations", "_validate_descriptor_contract"}
+            )
             lines.append(f"    {variable_name} = _module_operations()")
             if bool(spec.get("validate", True)):
                 lines.append(f"    _validate_descriptor_contract({variable_name})")
         else:
-            raise ValueError(f"unsupported argparse_function_call argument kind: {kind!r}")
+            raise ValueError(
+                f"unsupported argparse_function_call argument kind: {kind!r}"
+            )
         kwargs.append(f"{name}={variable_name}")
     if needs_support:
         imported = ", ".join(sorted(needs_support))
@@ -1201,17 +1430,23 @@ def _render_argparse_function_call_handler(function_name: str, handler: dict[str
     elif result_mode == "emit_payload":
         lines.append(f"    payload = {call}")
         lines.append(f"    from {emit_import_module} import {emit_function}")
-        lines.append(f"    {emit_function}(payload=payload, format_name=getattr(args, {emit_format_attr!r}, 'text'))")
+        lines.append(
+            f"    {emit_function}(payload=payload, format_name=getattr(args, {emit_format_attr!r}, 'text'))"
+        )
         lines.append("    return 0")
     elif result_mode == "return_zero":
         lines.append(f"    {call}")
         lines.append("    return 0")
     else:
-        raise ValueError(f"unsupported argparse_function_call result mode: {result_mode!r}")
+        raise ValueError(
+            f"unsupported argparse_function_call result mode: {result_mode!r}"
+        )
     return "\n".join(lines) + "\n"
 
 
-def _render_module_front_door_runtime_handler(function_name: str, handler: dict[str, Any]) -> str:
+def _render_module_front_door_runtime_handler(
+    function_name: str, handler: dict[str, Any]
+) -> str:
     command_attr = str(handler["command_attr"])
     target_attr = str(handler.get("target_attr", "target"))
     format_attr = str(handler.get("format_attr", "format"))
@@ -1221,7 +1456,9 @@ def _render_module_front_door_runtime_handler(function_name: str, handler: dict[
     include_module_program = bool(handler.get("include_module_program", False))
     help_payload_import = str(handler["help_payload_import_module"])
     help_payload_function = str(handler["help_payload_function"])
-    help_text_import = str(handler.get("help_text_import_module") or help_payload_import)
+    help_text_import = str(
+        handler.get("help_text_import_module") or help_payload_import
+    )
     help_text_function = str(handler["help_text_function"])
     missing_message = str(handler["missing_module_message"])
     replacements = [
@@ -1323,9 +1560,14 @@ def _python_runtime_handler_module(
 ) -> str:
     operation_executor = _operation_executor_binding(package)
     executor_module = str(operation_executor["module_file"])
-    operation_ids = {str(operation_id) for operation_id in operation_executor["supported_operation_ids"]}
+    operation_ids = {
+        str(operation_id)
+        for operation_id in operation_executor["supported_operation_ids"]
+    }
     direct_handlers = {
-        str(handler["operation_id"]): handler for handler in binding.get("runtime_module_handlers", []) if isinstance(handler, dict)
+        str(handler["operation_id"]): handler
+        for handler in binding.get("runtime_module_handlers", [])
+        if isinstance(handler, dict)
     }
     operation_ids.update(direct_handlers)
     handler_functions = []
@@ -1335,9 +1577,13 @@ def _python_runtime_handler_module(
         if operation_id in direct_handlers:
             handler = direct_handlers[operation_id]
             if handler.get("handler") == "module_front_door":
-                handler_functions.append(_render_module_front_door_runtime_handler(function_name, handler))
+                handler_functions.append(
+                    _render_module_front_door_runtime_handler(function_name, handler)
+                )
             elif handler.get("handler") == "argparse_function_call":
-                handler_functions.append(_render_argparse_function_call_handler(function_name, handler))
+                handler_functions.append(
+                    _render_argparse_function_call_handler(function_name, handler)
+                )
             else:
                 import_module = str(handler["import_module"])
                 imported_function = str(handler.get("function") or function_name)
@@ -1373,7 +1619,8 @@ def _python_runtime_handler_module(
         "from . import generated_operation_contract\n"
         "from . import run_generated_command\n"
         "from . import supports_generated_command\n"
-        f"from .{executor_module} import run_operation_ir\n\n\n" + "def _program_name() -> str:\n"
+        f"from .{executor_module} import run_operation_ir\n\n\n"
+        + "def _program_name() -> str:\n"
         '    invoked = sys.argv[0].replace("\\\\", "/").rsplit("/", 1)[-1]\n'
         f"    if invoked == {package['program']!r}:\n"
         "        return invoked\n"
@@ -1413,7 +1660,12 @@ def _python_runtime_adapter_module(
 ) -> str:
     weak_agent_routing = _weak_agent_routing_for_target(target, maturity_levels)
     runnable = str(
-        target.get("maturity_level_ref") in {"runtime-backed-read-only-adapter", "weak-agent-safe-adapter", "mutation-capable-adapter"}
+        target.get("maturity_level_ref")
+        in {
+            "runtime-backed-read-only-adapter",
+            "weak-agent-safe-adapter",
+            "mutation-capable-adapter",
+        }
     )
     runtime_module_file = _runtime_module_file_for_package(package)
     main_function = ""
@@ -1686,7 +1938,9 @@ def _python_runtime_adapter_module(
     )
 
 
-def _python_module(package: dict[str, Any], *, source_path: str, regenerate_command: str) -> str:
+def _python_module(
+    package: dict[str, Any], *, source_path: str, regenerate_command: str
+) -> str:
     return (
         '"""Generated command package metadata.\n\n'
         f"Source: {source_path}\n"
@@ -1726,7 +1980,9 @@ def render_python_outputs(
 ) -> list[GeneratedOutput]:
     outputs: list[GeneratedOutput] = []
     module_path = root / "cli.py"
-    outputs.append(GeneratedOutput(root / "__init__.py", "from .cli import *  # noqa: F403\n"))
+    outputs.append(
+        GeneratedOutput(root / "__init__.py", "from .cli import *  # noqa: F403\n")
+    )
     outputs.append(
         GeneratedOutput(
             root / "command_package.json",
@@ -1742,11 +1998,19 @@ def render_python_outputs(
         )
     )
     if _is_runtime_backed_python_target(target):
-        outputs.extend(_runtime_consumed_operation_outputs(package, repo_root=repo_root, root=root))
-        outputs.extend(_python_resource_copy_outputs(package, repo_root=repo_root, root=root))
+        outputs.extend(
+            _runtime_consumed_operation_outputs(package, repo_root=repo_root, root=root)
+        )
+        outputs.extend(
+            _python_resource_copy_outputs(package, repo_root=repo_root, root=root)
+        )
         operation_executor = _operation_executor_binding(package)
         if operation_executor:
-            executor_module_path = Path(str(operation_executor.get("module_file", "operation_executor")).replace(".", "/"))
+            executor_module_path = Path(
+                str(
+                    operation_executor.get("module_file", "operation_executor")
+                ).replace(".", "/")
+            )
             outputs.append(
                 GeneratedOutput(
                     root / executor_module_path.with_suffix(".py"),
@@ -1759,7 +2023,10 @@ def render_python_outputs(
                 )
             )
         python_runtime_binding = package.get("python_runtime_binding", {})
-        if python_runtime_binding.get("render_runtime_module") is True and operation_executor:
+        if (
+            python_runtime_binding.get("render_runtime_module") is True
+            and operation_executor
+        ):
             outputs.extend(
                 _python_command_module_outputs(
                     package,
@@ -1772,7 +2039,9 @@ def render_python_outputs(
             outputs.append(
                 GeneratedOutput(
                     root / "primitives" / "__init__.py",
-                    _python_primitives_module(source_path=source_path, regenerate_command=regenerate_command),
+                    _python_primitives_module(
+                        source_path=source_path, regenerate_command=regenerate_command
+                    ),
                 )
             )
             outputs.append(
@@ -1799,7 +2068,9 @@ def render_python_outputs(
             outputs.append(
                 GeneratedOutput(
                     root / "primitives" / "operation_composition.py",
-                    _python_operation_composition_module(source_path=source_path, regenerate_command=regenerate_command),
+                    _python_operation_composition_module(
+                        source_path=source_path, regenerate_command=regenerate_command
+                    ),
                 )
             )
             outputs.append(
@@ -1814,7 +2085,9 @@ def render_python_outputs(
             for local_runtime_binding in _local_runtime_bindings(package):
                 if not _local_runtime_binding_functions(package, local_runtime_binding):
                     continue
-                local_runtime_module_path = Path(str(local_runtime_binding["module_file"]).replace(".", "/"))
+                local_runtime_module_path = Path(
+                    str(local_runtime_binding["module_file"]).replace(".", "/")
+                )
                 outputs.append(
                     GeneratedOutput(
                         root / local_runtime_module_path.with_suffix(".py"),
@@ -1845,5 +2118,12 @@ def render_python_outputs(
             )
         )
         return outputs
-    outputs.append(GeneratedOutput(module_path, _python_module(package, source_path=source_path, regenerate_command=regenerate_command)))
+    outputs.append(
+        GeneratedOutput(
+            module_path,
+            _python_module(
+                package, source_path=source_path, regenerate_command=regenerate_command
+            ),
+        )
+    )
     return outputs
